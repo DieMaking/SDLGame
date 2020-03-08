@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+	<title>SDLGame</title>
+
+	<link rel="stylesheet" href="window.css">
+	<link rel="stylesheet" href="main.css">
+	<script src="window.js"></script>
+</head>
+<body>
+
+<div id="winjs-container"></div>
+
+<script>
+	var winjs = new WinJS(document.querySelector("#winjs-container"));
+
+	var conWin = winjs.createWin({
+		title: "Console",
+		id: "conWin",
+		icon: "console.png",
+		index: 2,
+		w: 8 * 100, h: 16 * 28,
+		x: (window.innerWidth - 800) - 20, y: (window.innerHeight - 479) - 20,
+		content: '<textarea id="output" readonly></textarea>',
+		close: true,
+		maximize: true,
+		minimize: true
+	});
+
+	var gameWin = winjs.createWin({
+		title: "SDLGame",
+		id: "gameWin",
+		icon: "game.png",
+		index: 1,
+		w: 800, h: 600,
+		content: '<canvas id="canvas" oncontextmenu="event.preventDefault();" tabindex="-1"></canvas><div id="status-bg"></div><div id="status"><div id="spinner"></div><div id="status-text">Downloading...</div><progress value="0" max="100" id="progress" hidden></progress></div>',
+		close: function() {
+			window.close();
+		},
+		maximize: function() {
+			if(Module.requestFullscreen) Module.requestFullscreen(true, false);
+			return false;
+		},
+		minimize: true,
+	});
+
+	// Callback executed by the C++ code
+	function sdlgame_on_exit() {
+		gameWin.close();
+	}
+
+	var canvasElem = document.querySelector("#canvas");
+	var outputElem = document.querySelector("#output");
+	var statusElem = document.querySelector("#status");
+	var statusBgElem = document.querySelector("#status-bg");
+	var statusTextElem = document.querySelector("#status-text");
+	var progressElem = document.querySelector("#progress");
+	var spinnerElem = document.querySelector("#spinner");
+
+	outputElem.addEventListener("click", function() {
+		conWin.main.focus();
+	}, false);
+
+	canvasElem.addEventListener("click", function() {
+		gameWin.main.focus();
+	}, false);
+
+	canvasElem.addEventListener("webglcontextlost", function(e) {
+		e.preventDefault();
+		alert("WebGL context lost. You will need to reload the page.");
+	}, false);
+
+	var Module = {
+		preRun: [],
+		postRun: [],
+		canvas: canvasElem,
+		print: function(text) {
+			if(arguments.length > 1) text = Array.prototype.join.call(arguments, " ");
+			console.log(text);
+
+			//text = text.replace(/&/g, "&amp;");
+			//text = text.replace(/</g, "&lt;");
+			//text = text.replace(/>/g, "&gt;");
+			//text = text.replace('\n', '<br>', 'g');
+			outputElem.value += text + "\n";
+			outputElem.scrollTop = outputElem.scrollHeight; // scroll to bottom
+		},
+		printErr: function(text) {
+			if(arguments.length > 1) text = Array.prototype.join.call(arguments, " ");
+			console.error(text);
+
+			outputElem.value += text + "\n";
+			outputElem.scrollTop = outputElem.scrollHeight; // scroll to bottom
+		},
+		setStatus: function(text) {
+			if(!Module.setStatus.last) Module.setStatus.last = { time: Date.now(), text: "" };
+			if(text === Module.setStatus.last.text) return;
+			var m = text.match(/([^(]+)\((\d+(\.\d+)?)\/(\d+)\)/);
+			var now = Date.now();
+			if(m && now - Module.setStatus.last.time < 30) return; // if this is a progress update, skip it if too soon
+			Module.setStatus.last.time = now;
+			Module.setStatus.last.text = text;
+			if(m) {
+				text = m[1];
+				progressElem.value = parseInt(m[2])*100;
+				progressElem.max = parseInt(m[4])*100;
+				progressElem.hidden = false;
+			} else {
+				progressElem.value = null;
+				progressElem.max = null;
+				progressElem.hidden = true;
+			}
+			statusTextElem.innerHTML = text;
+			statusElem.style.display = statusBgElem.style.display = (!text ? "none" : "");
+		},
+		totalDependencies: 0,
+		monitorRunDependencies: function(left) {
+			this.totalDependencies = Math.max(this.totalDependencies, left);
+			Module.setStatus(left ? "Preparing... (" + (this.totalDependencies - left) + "/" + this.totalDependencies + ")" : "Downloaded");
+		}
+	};
+
+	Module.setStatus("Downloading...");
+	window.onerror = function(event) {
+		// TODO: do not warn on ok events like simulating an infinite loop or exitStatus
+		Module.setStatus("Error! Check JavaScript console");
+		spinnerElem.style.display = "none";
+		Module.setStatus = function(text) {
+			if(arguments.length > 1) text = Array.prototype.join.call(arguments, " ");
+			if(text) Module.printErr("[post-exception status] " + text);
+		};
+	};
+</script>
+<script async src="game.js"></script>
+
+</body>
+</html>

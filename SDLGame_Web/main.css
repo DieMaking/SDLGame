@@ -1,0 +1,113 @@
+html, body, #winjs-container {
+	width: 100%;
+	height: 100%;
+}
+
+body {
+	margin: 0;
+	padding: 0;
+	background: #34495E;
+	overflow: hidden;
+}
+
+#canvas {
+	width: 800px;
+	height: 600px;
+	background: #000000;
+	border: none;
+	outline: none;
+}
+
+#status-bg {
+	background: rgba(0, 0, 0, 0.7);
+	width: 100%;
+	height: 100%;
+	position: absolute;
+	left: 0;
+	right: 0;
+	top: 0;
+	bottom: 0;
+}
+
+#status {
+	background: #FFFFFF;
+	width: 300px;
+	height: 90px;
+	position: absolute;
+	left: 0;
+	right: 0;
+	top: 0;
+	bottom: 0;
+	margin: auto;
+	max-width: 100%;
+	max-height: 100%;
+	overflow: auto;
+}
+
+#spinner {
+	height: 40px;
+	width: 40px;
+	margin: 10px 0 0 10px;
+	display: inline-block;
+	vertical-align: top;
+
+	-webkit-animation: rotation .8s linear infinite;
+	-moz-animation: rotation .8s linear infinite;
+	-o-animation: rotation .8s linear infinite;
+	animation: rotation 0.8s linear infinite;
+
+	border-left: 5px solid rgb(235, 235, 235);
+	border-right: 5px solid rgb(235, 235, 235);
+	border-bottom: 5px solid rgb(235, 235, 235);
+	border-top: 5px solid rgb(120, 120, 120);
+
+	border-radius: 100%;
+	background-color: rgb(189, 215, 46);
+}
+
+@-webkit-keyframes rotation {
+	from {-webkit-transform: rotate(0deg);}
+	to {-webkit-transform: rotate(360deg);}
+}
+@-moz-keyframes rotation {
+	from {-moz-transform: rotate(0deg);}
+	to {-moz-transform: rotate(360deg);}
+}
+@-o-keyframes rotation {
+	from {-o-transform: rotate(0deg);}
+	to {-o-transform: rotate(360deg);}
+}
+@keyframes rotation {
+	from {transform: rotate(0deg);}
+	to {transform: rotate(360deg);}
+}
+
+#status-text {
+	display: inline-block;
+	vertical-align: top;
+	margin-top: 20px;
+	margin-left: 10px;
+	font-weight: bold;
+	font-size: 16px;
+	color: rgb(120, 120, 120);
+}
+
+#progress {
+	margin: 10px;
+	height: 20px;
+	width: 280px;
+}
+
+#output {
+	width: 100%;
+	height: 100%;
+	margin: 0;
+	padding: 2px 0;
+	background: #000000;
+	color: #FFFFFF;
+	font-family: 'Lucida Console', Monaco, monospace;
+	outline: none;
+	border: none;
+	resize: none;
+	font-size: 14px;
+}

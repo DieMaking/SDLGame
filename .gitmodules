@@ -1,0 +1,6 @@
+[submodule "include/easysock"]
+	path = include/easysock
+	url = https://github.com/DieMaking/easysock.git
+[submodule "include/simpleini"]
+	path = include/simpleini
+	url = https://github.com/brofield/simpleini

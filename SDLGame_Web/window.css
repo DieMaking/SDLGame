@@ -1,0 +1,137 @@
+@import url("WeblySleekUI/weblysleekuisb.css");
+
+.winjs-window {
+	font: 13px "WeblySleek UI Semibold", "Segoe UI", sans-serif;
+	position: absolute;
+	border: 1px solid rgba(0, 0, 0, 1);
+	background: #FFFFFF;
+	outline: none;
+	transition: display 0.5s;
+}
+
+.winjs-window:focus {
+	border: 1px solid #1883D7;
+}
+
+.winjs-header {
+	cursor: default;
+	width: 100%;
+	height: 31px;
+}
+
+.winjs-icon {
+	padding: 8px 0 0 8px;
+	width: 16px;
+	height: 16px;
+}
+
+.winjs-title {
+	padding: 8px 20px 0 6px;
+	vertical-align: top;
+	-webkit-user-select: none;
+	-moz-user-select: none;
+	-ms-user-select: none;
+	user-select: none;
+}
+
+.winjs-buttons {
+	float: right;
+}
+
+.winjs-header, .winjs-header div, .winjs-buttons div {
+	display: inline-block;
+}
+
+.winjs-close, .winjs-maximize, .winjs-minimize {
+	transition: background 0.3s;
+	background: #FFFFFF;
+	width: 45px;
+	height: 31px;
+	position: relative;
+	vertical-align: middle;
+}
+.winjs-close:hover {
+	background: #E81123;
+}
+.winjs-maximize:hover, .winjs-minimize:hover {
+	background: #E5E5E5;
+}
+
+.winjs-close .winjs-i-close {
+	width: 100%;
+	height: 100%;
+}
+.winjs-close .winjs-i-close:hover:before,
+.winjs-close .winjs-i-close:hover:after {
+	background: #FFFFFF;
+}
+
+.winjs-i-close:before, .winjs-i-close:after {
+	content: '';
+	width: 1px;
+	height: 14px;
+	background: #000000;
+	position: absolute;
+	top: 50%;
+	left: 50%;
+	margin-top: -7px;
+}
+.winjs-i-close:before {
+	transform: rotate(45deg);
+}
+.winjs-i-close:after {
+	transform: rotate(-45deg);
+}
+
+.winjs-i-minimize {
+	width: 10px;
+	height: 10px;
+	position: absolute;
+	top: 50%;
+	left: 50%;
+	margin-top: -10px;
+	margin-left: -5px;
+	border-bottom: 1px solid #000000;
+}
+
+.winjs-i-maximize {
+	width: 8px;
+	height: 8px;
+	position: absolute;
+	top: 50%;
+	left: 50%;
+	margin-top: -5px;
+	margin-left: -5px;
+	border: 1px solid #000000;
+}
+
+.winjs-i-unminimize:before, .winjs-i-unmaximize:before,
+.winjs-i-unminimize:after, .winjs-i-unmaximize:after {
+	content: '';
+	width: 8px;
+	height: 8px;
+	position: absolute;
+	top: 50%;
+	left: 50%;
+	border: 1px solid #000000;
+}
+
+.winjs-i-unmaximize:before,
+.winjs-i-unminimize:before {
+	margin-top: -7px;
+	margin-left: -3px;
+}
+
+.winjs-i-unmaximize:after,
+.winjs-i-unminimize:after {
+	margin-top: -3px;
+	margin-left: -8px;
+}
+
+.winjs-content {
+	position: relative;
+}
+
+.winjs-content * {
+	box-sizing: border-box;
+}

@@ -1,93 +1,29 @@
 #define SDL_MAIN_HANDLED
 
 #include <SDL2/SDL.h>
-#include <SDL2/SDL_image.h>
 #include <SDL2/SDL_ttf.h>
+#include <SDL2/SDL_image.h>
+#include <SDL2/SDL_mixer.h>
 
 #include <iostream>
+#include <cstdio>
 #include <ctime>
 
 #ifdef __EMSCRIPTEN__
 	#include <emscripten.h>
 	#include "../include/files.hpp"
 #else
-	#include <discord_rpc.h>
 	#include "../include/easysock/tcp.hpp"
-	#include "../include/discord_rpc.hpp"
+	#include "../include/discord.hpp"
 #endif
-
-#include "../include/renderer.hpp"
+#include "../include/simpleini/SimpleIni.h"
 #include "../include/game.hpp"
-
-/*
-#if SDL_BYTEORDER == SDL_BIG_ENDIAN
-	Uint32 rmask = 0xff000000;
-	Uint32 gmask = 0x00ff0000;
-	Uint32 bmask = 0x0000ff00;
-	Uint32 amask = 0x000000ff;
-#else
-	Uint32 rmask = 0x000000ff;
-	Uint32 gmask = 0x0000ff00;
-	Uint32 bmask = 0x00ff0000;
-	Uint32 amask = 0xff000000;
-#endif
-*/
-
-// Key locks
-bool escKey;
-bool optKey;
-bool enterKey;
-bool jumpKey;
-bool counterKey;
-bool mouseLock;
-
-// Main menu option
-int option;
-
-// Main menu switch
-bool playing;
-
-// For resizing and setting position
-SDL_Rect rect;
-
-// For flipping character
-SDL_RendererFlip flip;
-
-// For events
-SDL_Event e;
-
-// For keyboard handling
-const uint8_t* key;
-
-// For mouse handling
-int mouseX, mouseY;
-Uint32 mouse;
-
-// Last X and Y
-int lastX, lastY;
-
-// Used to count FPS
-uint32_t fpsFrameTicks;
-uint32_t fpsFrames;
-
-// Counter switch
-bool showCounter;
-
-// Resources used in main loop
-SDL_Texture* bg;
-SDL_Texture* menubg;
-SDL_Texture* player;
-SDL_Texture* overlay;
-SDL_Texture* fps_counter;
-SDL_Texture* text;
-SDL_Texture* counter1;
-SDL_Texture* counter2;
-SDL_Texture* counter3;
-SDL_Texture* counter4;
-SDL_Texture* counter5;
+#include "../include/engine.hpp"
 
 // Game main functions
 void MainLoop();
+void FrameBegin();
+void FrameEnd();
 void Frame();
 
 #ifndef __EMSCRIPTEN__
@@ -100,27 +36,40 @@ void Frame();
 	// Server connection
 	easysock::tcp::Client* conn;
 	bool connected;
+	bool skipconnect;
+
+	// Is user a spectator?
+	bool spectating;
 
 	// Startup thread
 	pthread_t thread;
 	void* StartupThread(void*);
 #endif
 
-Renderer renderer(title, SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, width, height);
+// Create engine
+Engine engine(title, SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, width, height);
+
+#ifndef __EMSCRIPTEN__
+	// Create INI parser
+	CSimpleIniA ini(true);
+#endif
 
 int main(int argc, char* argv[]) {
 	// Needed by rand() function
 	srand(time(0));
 
-	// Set default values
-	option = 1;
-
 	#ifndef __EMSCRIPTEN__
-		// Arguments loop
+		// Parse arguments
 		for(int i = 1; i < argc; i++) {
 			std::string arg = argv[i];
-
-			// Enable debug
+			if(arg == "--help" || arg == "-h") {
+				const char* msg = "  --help -h	Show this message\n"
+				                  "  --debug	Enable debugging\n"
+				                  "  --demo		Launch game presentation\n"
+				                  "  --skip-connect	Skip connecting to the server\n";
+				DisplayInfo(title + std::string(" ") + version + std::string("\n") + msg);
+				return 0;
+			}
 			if(arg == "--debug" && !debug) {
 				showCounter = true;
 				debug = true;
@@ -129,55 +78,93 @@ int main(int argc, char* argv[]) {
 			if(arg == "--demo" && !demo) {
 				demo = true;
 			}
+			if(arg == "--skip-connect" && !skipconnect) {
+				frame = 2;
+				skipconnect = true;
+			}
 		}
 	#endif
 
-	if(!renderer.lastError.empty()) {
-		DisplayError(renderer.lastError);
+	// Init engine
+	if(!engine.Init()) {
+		DisplayError(engine.lastError);
 		return 1;
 	}
 
-	// Load raw resources
-	#ifdef __EMSCRIPTEN__
-		SDL_RWops* button_font_res = SDL_RWFromConstMem(button_font_raw, button_font_raw_size);
-		SDL_RWops* counter_font_res = SDL_RWFromConstMem(counter_font_raw, counter_font_raw_size);
-		SDL_RWops* bg_res = SDL_RWFromConstMem(bg_raw, bg_raw_size);
-		SDL_RWops* menubg_res = SDL_RWFromConstMem(menubg_raw, menubg_raw_size);
-		SDL_RWops* player_res = SDL_RWFromConstMem(player_raw, player_raw_size);
-		if(button_font_res == NULL || counter_font_res == NULL || bg_res == NULL || menubg_res == NULL || player_res == NULL) {
+	#ifndef __EMSCRIPTEN__
+		// Load INI file
+		if(ini.LoadFile("config.ini") == SI_FILE) {
+			ini.SetValue("config", "volume", "128");
+			ini.SaveFile("config.ini");
+		}
+		volume = strtol(ini.GetValue("config", "volume", "128"), NULL, 10);
+
+		// Set resource paths
+		const char* bgData = "images/bg.png";
+		const char* menubgData = "images/menubg.png";
+		const char* playerData = "images/player.png";
+		const char* buttonFontData = "fonts/DroidSans.ttf";
+		const char* counterFontData = "fonts/Visitor2.ttf";
+		const char* bgsoundData = "sounds/bgsound.mp3";
+	#else
+		// Load raw resources
+		SDL_RWops* bgData = SDL_RWFromConstMem(bg_raw, bg_raw_size);
+		SDL_RWops* menubgData = SDL_RWFromConstMem(menubg_raw, menubg_raw_size);
+		SDL_RWops* playerData = SDL_RWFromConstMem(player_raw, player_raw_size);
+		SDL_RWops* buttonFontData = SDL_RWFromConstMem(button_font_raw, button_font_raw_size);
+		SDL_RWops* counterFontData = SDL_RWFromConstMem(counter_font_raw, counter_font_raw_size);
+		SDL_RWops* bgsoundData = SDL_RWFromConstMem(bgsound_raw, bgsound_raw_size);
+		if(bgData == NULL || menubgData == NULL || playerData == NULL || buttonFontData == NULL || counterFontData == NULL || bgsoundData == NULL) {
 			DisplayError("Can't load required assets (" + std::string(SDL_GetError()) + ")");	
 			return 1;
 		}
-	#else
-		const char* button_font_res = "fonts/DroidSans.ttf";
-		const char* counter_font_res = "fonts/Visitor2.ttf";
-		const char* bg_res = "images/bg.png";
-		const char* menubg_res = "images/menubg.png";
-		const char* player_res = "images/player.png";
 	#endif
 
-	// Load fonts
-	button_font = renderer.LoadFont(button_font_res, 22);
-	counter_font = renderer.LoadFont(counter_font_res, 25);
-	if(button_font == NULL || counter_font == NULL) {
-		DisplayError("Can't load required assets (" + std::string(TTF_GetError()) + ")");
-		return 1;
-	}
-
 	// Load textures
-	bg = renderer.LoadTexture(bg_res);
-	menubg = renderer.LoadTexture(menubg_res);
-	player = renderer.LoadTexture(player_res);
+	bg = engine.LoadTexture(bgData);
+	menubg = engine.LoadTexture(menubgData);
+	player = engine.LoadTexture(playerData);
 	if(bg == NULL || menubg == NULL || player == NULL) {
 		DisplayError("Can't load required assets (" + std::string(IMG_GetError()) + ")");
 		return 1;
 	}
 
-	// Create overlay
-	overlay = renderer.CreateOverlay(width, height);
+	// Load fonts
+	buttonFont = engine.LoadFont(buttonFontData, 22);
+	optionFont = engine.LoadFont(buttonFontData, 18);
+	counterFont = engine.LoadFont(counterFontData, 25);
+	if(buttonFont == NULL || optionFont == NULL || counterFont == NULL) {
+		DisplayError("Can't load required assets (" + std::string(TTF_GetError()) + ")");
+		return 1;
+	}
 
-	// Create FPS counter
-	fps_counter = renderer.RenderText_Solid(counter_font, "FPS: 0", black);
+	// Load sounds
+	bgsound = engine.LoadSound(bgsoundData);
+	if(bgsound == NULL) {
+		DisplayError("Can't load required assets (" + std::string(TTF_GetError()) + ")");
+		return 1;
+	}
+
+	// Setup sounds
+	// Channel 0 = background music
+	// Channel 1 = other
+	Mix_AllocateChannels(2);
+	Mix_Volume(0, volume);
+	Mix_VolumeChunk(bgsound, 128);
+
+	// Create overlay
+	overlay = engine.CreateOverlay(width, height);
+
+	if(showCounter) {
+		// Create FPS counter
+		counter0 = engine.RenderSolidText(counterFont, "FPS: 0", frame == 1 ? black : dimwhite);
+	}
+
+	if(demo) {
+		// Set up demo mode
+		isPlaying = true;
+		frame = 1;
+	}
 
 	#ifdef __EMSCRIPTEN__
 		// Run main loop
@@ -186,33 +173,35 @@ int main(int argc, char* argv[]) {
 		// Init easysock (needed on Windows)
 		easysock::init();
 
-		// Init Discord RPC
-		DiscordRPC::Init("411983281886593024");
+		// Init Discord Game SDK
+		DiscordSDK::Init(411983281886593024);
 
-		// Update Discord RPC
-		DiscordRPC::MatchSecret = RandomStr(24);
-		DiscordRPC::JoinSecret = RandomStr(24);
-		DiscordRPC::SpectateSecret = RandomStr(24);
-		DiscordRPC::StartTimestamp = time(0);
-		DiscordRPC::LargeImageKey = "square_icon";
-		DiscordRPC::LargeImageText = version;
-		DiscordRPC::UpdatePresence();
+		// Update Discord Presence
+		DiscordSDK::RPC.type = DiscordActivityType_Playing;
+		DiscordSDK::RPC.timestamps.start = time(0);
+		strcpy(DiscordSDK::RPC.assets.large_image, "square_icon");
+		strcpy(DiscordSDK::RPC.assets.large_text, version);
+		RandomStr(DiscordSDK::RPC.secrets.match, 32);
+		RandomStr(DiscordSDK::RPC.secrets.join, 32);
+		RandomStr(DiscordSDK::RPC.secrets.spectate, 32);
+		DiscordSDK::UpdateRPC();
 
-		if(!demo) {// Run startup thread
+		if(!demo && !skipconnect) {
+			// Run startup thread
 			pthread_create(&thread, NULL, StartupThread, NULL);
-		} else { // Set up demo mode
-			playing = true;
-			frame = 1;
 		}
 
-		while(!quit) {
-			// Get ticks at frame start
-			frameTicks = SDL_GetTicks();
+		while(true) {
+			if(fps > 0) {
+				// Get ticks at frame start
+				frameTicks = SDL_GetTicks();
+			}
 
 			// Run main loop
 			MainLoop();
+			if(quit) break;
 
-			if(!quit) {
+			if(fps > 0) {
 				// Wait remaining time
 				frameTicks = SDL_GetTicks() - frameTicks;
 				if(frameTicks < 1000 / fps) {
@@ -230,91 +219,59 @@ void MainLoop() {
 	if(frame == 0) {
 		#ifdef __EMSCRIPTEN__
 			// Set render color to black
-			renderer.SetColor({ 0, 0, 0, 255 });
+			engine.SetColor(black);
 
 			// Clear renderer
-			renderer.Clear();
+			engine.Clear();
 
 			// Show render
-			renderer.Present();
-		#else
-			// Quit Discord
-			Discord_Shutdown();
-
-			// Quit easysock (needed on Windows)
-			easysock::exit();
+			engine.Present();
 		#endif
 
 		// Destroy resources
 		SDL_DestroyTexture(bg);
+		SDL_DestroyTexture(menubg);
 		SDL_DestroyTexture(player);
 		SDL_DestroyTexture(overlay);
-		SDL_DestroyTexture(fps_counter);
+		SDL_DestroyTexture(counter0);
 
 		// Destroy fonts
-		TTF_CloseFont(button_font);
-		TTF_CloseFont(counter_font);
+		TTF_CloseFont(buttonFont);
+		TTF_CloseFont(optionFont);
+		TTF_CloseFont(counterFont);
+
+		// Destroy sounds
+		Mix_FreeChunk(bgsound);
 
 		#ifdef __EMSCRIPTEN__
 			// Run JavaScript callback
-			EM_ASM(
+			EM_ASM({
 				if(sdlgame_on_exit) sdlgame_on_exit();
-			);
+			}, NULL);
 
 			// Exit from the loop
 			emscripten_cancel_main_loop();
 		#else
+			// Save config
+			ini.SetValue("config", "volume", NumToStr(volume, 0).c_str());
+			ini.SaveFile("config.ini");
+
+			// Destroy Discord SDK
+			DiscordSDK::Destroy();
+
+			// Quit easysock (needed on Windows)
+			easysock::exit();
+
 			// Exit from the loop
 			quit = true;
 		#endif
-
 		return;
 	}
 
 	// Load frame
 	if(lastFrame != frame) {
 		lastFrame = frame;
-		switch(frame) {
-			case 1: // Game
-				#ifndef __EMSCRIPTEN__
-					// Update Discord Presence
-					DiscordRPC::State = "In Game";
-					DiscordRPC::Details = (spectating ? "Spectating someone" : (demo ? "Watching demo" : "Stage 1"));
-					DiscordRPC::UpdatePresence();
-				#endif
-
-				break;
-			case 2: // Main menu
-				#ifndef __EMSCRIPTEN__
-					// Update Discord Presence
-					DiscordRPC::State = "In Main Menu";
-					DiscordRPC::Details = "Wasting some time";
-					DiscordRPC::UpdatePresence();
-				#endif
-
-				break;
-			case 3: // Options
-				// Create resources
-				text = renderer.RenderText(button_font, "Coming soon...", white);
-
-				#ifndef __EMSCRIPTEN__
-					// Update Discord Presence
-					DiscordRPC::State = "In Main Menu";
-					DiscordRPC::Details = "Changing some options";
-					DiscordRPC::UpdatePresence();
-				#endif
-
-				break;
-			case 4: // Dialog box
-				#ifndef __EMSCRIPTEN__
-					// Update Discord Presence
-					DiscordRPC::State = "In Main Menu";
-					DiscordRPC::Details = "Wasting some time";
-					DiscordRPC::UpdatePresence();
-				#endif
-
-				break;
-		}
+		FrameBegin();
 	}
 
 	// Run frame
@@ -334,7 +291,8 @@ void MainLoop() {
 			//
 			break;
 		case 3: // Options
-			//
+			// Destroy volume label
+			SDL_DestroyTexture(volumeLabel);
 			break;
 		case 4: // Dialog box
 			// Destroy text
@@ -344,31 +302,98 @@ void MainLoop() {
 
 	// Unload frame (frame change)
 	if(lastFrame != frame) {
-		switch(lastFrame) {
-			case 1: // Game
-				//
-				break;
-			case 2: // Main menu
-				//
-				break;
-			case 3: // Options
-				// Destroy resources
-				SDL_DestroyTexture(text);
-				break;
-			case 4: // Dialog box
-				//
-				break;
-		}
+		FrameEnd();
+	}
+}
+
+void FrameBegin() {
+	if(showCounter) {
+		counter0 = engine.RenderSolidText(counterFont, "FPS: " + NumToStr(fpsCount, 0), frame == 1 ? black : dimwhite);
+	}
+
+	switch(frame) {
+		case 1: // Game
+			#ifndef __EMSCRIPTEN__
+				// Update Discord Presence
+				strcpy(DiscordSDK::RPC.state, "In Game");
+				strcpy(DiscordSDK::RPC.details, (spectating ? "Spectating someone" : (demo ? "Watching demo" : "Stage 1")));
+				DiscordSDK::UpdateRPC();
+			#endif
+
+			// Play background music
+			if(!Mix_Playing(0)) {
+				Mix_PlayChannel(0, bgsound, -1);
+			} else {
+				Mix_Resume(0);
+			}
+			break;
+		case 2: // Main menu
+			#ifndef __EMSCRIPTEN__
+				// Update Discord Presence
+				strcpy(DiscordSDK::RPC.state, "In Main Menu");
+				strcpy(DiscordSDK::RPC.details, "Wasting some time");
+				DiscordSDK::UpdateRPC();
+			#endif
+			break;
+		case 3: // Options
+			#ifndef __EMSCRIPTEN__
+				// Update Discord Presence
+				strcpy(DiscordSDK::RPC.state, "In Main Menu");
+				strcpy(DiscordSDK::RPC.details, "Changing some options");
+				DiscordSDK::UpdateRPC();
+			#endif
+
+			// Create trackbar
+			trackbar = engine.CreateTexture(9, 25, SDL_TEXTUREACCESS_TARGET);
+			engine.SetTarget(trackbar);
+			engine.SetColor(white);
+			engine.Clear();
+			engine.SetColor(black);
+			engine.DrawLine(2, 8, 5, 1);
+			engine.DrawLine(2, 12, 5, 1);
+			engine.DrawLine(2, 16, 5, 1);
+			engine.SetColor(white);
+			engine.SetTarget(NULL);
+			break;
+		case 4: // Dialog box
+			#ifndef __EMSCRIPTEN__
+				// Update Discord Presence
+				strcpy(DiscordSDK::RPC.state, "In Main Menu");
+				strcpy(DiscordSDK::RPC.details, "Wasting some time");
+				DiscordSDK::UpdateRPC();
+			#endif
+			break;
+	}
+}
+
+void FrameEnd() {
+	switch(lastFrame) {
+		case 1: // Game
+			Mix_Pause(0);
+			break;
+		case 2: // Main menu
+			//
+			break;
+		case 3: // Options
+			// Destroy trackbar
+			SDL_DestroyTexture(trackbar);
+			break;
+		case 4: // Dialog box
+			//
+			break;
 	}
 }
 
 void Frame() {
-	// FPS counting
-	fpsFrames++;
-	if(fpsFrameTicks + 1000 < SDL_GetTicks()) {
-		fps_counter = renderer.RenderText_Solid(counter_font, "FPS: " + std::to_string(fpsFrames), black);
-		fpsFrames = 0;
-		fpsFrameTicks = SDL_GetTicks();
+	if(showCounter) {
+		// FPS counting
+		fpsFrames++;
+		if(fpsFrameTicks + 1000 < SDL_GetTicks()) {
+			fpsCount = fpsFrames;
+			fpsFrames = 0;
+			counter0 = engine.RenderSolidText(counterFont, "FPS: " + NumToStr(fpsCount, 0), frame == 1 ? black : dimwhite);
+			fpsFrameTicks = SDL_GetTicks();
+		}
 	}
 
 	// Events
@@ -381,7 +406,7 @@ void Frame() {
 
 	#ifndef __EMSCRIPTEN__
 		// Run Discord Presence tasks
-		DiscordRPC::RunTasks();
+		DiscordSDK::RunTasks();
 	#endif
 
 	// Keyboard handling
@@ -414,144 +439,84 @@ void Frame() {
 	if(key[COUNTER_KEYCODE] && !counterKey) {
 		counterKey = true;
 		showCounter = !showCounter;
+		counter0 = engine.RenderSolidText(counterFont, "FPS: " + NumToStr(fpsCount, 0), frame == 1 ? black : dimwhite);
 	}
 
 	// Show main menu, back to game or exit
 	if(key[SDL_SCANCODE_ESCAPE] && !escKey) {
 		escKey = true;
 		if(frame != 4 || !dialogBox.buttonText.empty()) {
-			frame = (demo ? 0 : (frame != 2 ? 2 : (playing ? 1 : 0)));
+			frame = (demo ? 0 : (frame != 2 ? 2 : (isPlaying ? 1 : 0)));
 		}
 		return;
 	}
 
 	switch(frame) {
 		case 1: // Game
-			// If not spectating and not in demo mode
-			if(!spectating && !demo) {
-				// Move right and left
-				if(key[SDL_SCANCODE_LEFT]) {
-					if(flip != SDL_FLIP_HORIZONTAL) flip = SDL_FLIP_HORIZONTAL;
-					posX -= speed * delta;
-				}
-				if(key[SDL_SCANCODE_RIGHT]) {
-					if(flip != SDL_FLIP_NONE) flip = SDL_FLIP_NONE;
-					posX += speed * delta;
-				}
-
-				// Jump
-				if(key[SDL_SCANCODE_UP] && !jumpKey && jumpState < 2) {
-					jumpKey = true;
-					jumpState++;
-					velocityY = -(jumpState == 2 ? jumpStrength * 2 : jumpStrength);
-				}
-				if(!key[SDL_SCANCODE_UP] && jumpKey) {
-					jumpKey = false;
-				}
-
-				// Gravity
-				posY += velocityY * delta;
-
-				// Falling
-				if(posY < height - sizeY) {
-					if(jumpState != 3 && velocityY > 200) {
-						jumpState = 3;
+			#ifndef __EMSCRIPTEN__
+			if(!spectating) {
+			#endif
+				if(!demo) {
+					// Move right and left
+					if(key[SDL_SCANCODE_LEFT]) {
+						if(flip != SDL_FLIP_HORIZONTAL) flip = SDL_FLIP_HORIZONTAL;
+						posX -= speed * delta;
 					}
-					velocityY += gravity * delta;
-				} else if(jumpState > 0) {
-					jumpKey = false;
-					jumpState = 0;
-					velocityY = 0;
-				}
-
-				// Move character if it's below bottom barrier of the window
-				if(posY > height - sizeY) {
-					posY = height - sizeY;
-				}
-
-				// Go to next frame OR stop player on edge of window
-				if(gameFrame + 1 <= gameFrames) {
-					if(posX >= width - sizeX / 2) {
-						gameFrame++;
-						posX = sizeX / 2 - sizeX + 1;
+					if(key[SDL_SCANCODE_RIGHT]) {
+						if(flip != SDL_FLIP_NONE) flip = SDL_FLIP_NONE;
+						posX += speed * delta;
 					}
-				} else if(posX > width - sizeX) {
-					posX = width - sizeX;
-				}
 
-				// Go to previous frame OR stop player on edge of window
-				if(gameFrame - 1 > 0) {
-					if(posX <= sizeX / 2 - sizeX) {
-						gameFrame--;
-						posX = width - sizeX / 2 - 1;
-					}
-				} else if(posX < 1) {
-					posX = 1;
-				}
-
-				// Send player position to the server
-				if(connected && !spectating && (posX != lastX || posY != lastY)) {
-					lastX = posX;
-					lastY = posY;
-					if(conn->write("send " + Serialize(gameFrame, posX, posY) + "|") < 0) {
-						frame = 4;
-						dialogBox.Set("Error while communicating with the server (" + std::to_string(easysock::lastError) + " at " + std::to_string(easysock::lastErrorPlace) + ")");
-						pthread_create(&thread, NULL, StartupThread, NULL);
-						return;
-					}
-				}
-
-				// Get player position from the server (if spectating)
-				if(connected && spectating) {
-					std::string status = conn->read();
-					if(easysock::lastError) {
-						dialogBox.Set("Error while communicating with the server (" + std::to_string(easysock::lastError) + " at " + std::to_string(easysock::lastErrorPlace) + ")");
-						spectating = false;
-						pthread_create(&thread, NULL, StartupThread, NULL);
-						return;
-					} else {
-						Unserialize(status, gameFrame, posX, posY);
-					}
-				}
-
-				// On game frame change
-				if(gameFrame != lastGameFrame) {
-					lastGameFrame = gameFrame;
-
-					#ifndef __EMSCRIPTEN__
-						// Update Discord Presence
-						DiscordRPC::Details = "Stage " + std::to_string(gameFrame);
-						DiscordRPC::UpdatePresence();
-					#endif
-				}
-			} else if(demo) {
-				if(demo_direction) { // Left
-					if(flip != SDL_FLIP_HORIZONTAL) flip = SDL_FLIP_HORIZONTAL;
-					posX -= speed * delta;
-				} else { // Right
-					if(flip != SDL_FLIP_NONE) flip = SDL_FLIP_NONE;
-					posX += speed * delta;
-				}
-
-				// Gravity
-				posY += velocityY * delta;
-
-				// Jumping/Falling
-				if(posY < height - sizeY) {
-					if(jumpState == 1 && velocityY > 100) {
-						velocityY = -(jumpStrength * 2);
+					// Jump
+					if(key[SDL_SCANCODE_UP] && !jumpKey && jumpState < 2) {
+						jumpKey = true;
 						jumpState++;
+						velocityY = -(jumpState == 2 ? jumpStrength * 2 : jumpStrength);
 					}
-					if(jumpState != 3 && velocityY > 200) {
-						jumpState = 3;
+					if(!key[SDL_SCANCODE_UP] && jumpKey) {
+						jumpKey = false;
 					}
-					velocityY += gravity * delta;
-				} else if(jumpState > 0) {
-					jumpState = 0;
-					velocityY = 0;
+
+					// Gravity
+					posY += velocityY * delta;
+					if(posY < height - sizeY) {
+						if(jumpState != 3 && velocityY > 200) {
+							jumpState = 3;
+						}
+						velocityY += gravity * delta;
+					} else if(jumpState > 0) {
+						jumpState = 0;
+						velocityY = 0;
+					}
 				} else {
-					jumpState++;
-					velocityY = -jumpStrength;
+					if(demoDirection) { // Left
+						if(flip != SDL_FLIP_HORIZONTAL) flip = SDL_FLIP_HORIZONTAL;
+						posX -= speed * delta;
+					} else { // Right
+						if(flip != SDL_FLIP_NONE) flip = SDL_FLIP_NONE;
+						posX += speed * delta;
+					}
+
+					// Gravity
+					posY += velocityY * delta;
+
+					// Jumping/Falling
+					if(posY < height - sizeY) {
+						if(jumpState == 1 && velocityY > 100) {
+							velocityY = -(jumpStrength * 2);
+							jumpState++;
+						}
+						if(jumpState != 3 && velocityY > 200) {
+							jumpState = 3;
+						}
+						velocityY += gravity * delta;
+					} else if(jumpState > 0) {
+						jumpState = 0;
+						velocityY = 0;
+					} else {
+						jumpState++;
+						velocityY = -jumpStrength;
+					}
 				}
 
 				// Move character if it's below bottom barrier of the window
@@ -560,14 +525,13 @@ void Frame() {
 				}
 
 				// Go to next frame OR stop player on edge of window
-				if(gameFrame + 1 <= gameFrames) {
+				if(gameFrame + 1 <= GAME_FRAMES) {
 					if(posX >= width - sizeX / 2) {
 						gameFrame++;
 						posX = sizeX / 2 - sizeX + 1;
 					}
 				} else if(posX > width - sizeX) {
 					posX = width - sizeX;
-					if(!demo_direction) demo_direction = true;
 				}
 
 				// Go to previous frame OR stop player on edge of window
@@ -578,19 +542,69 @@ void Frame() {
 					}
 				} else if(posX < 1) {
 					posX = 1;
-					if(demo_direction) demo_direction = false;
+				}
+
+				/*if(CheckCollision()) {
+					if(posY + sizeY > rect.y && jumpState == 3) {
+						posY = rect.y - sizeY;
+					} else if(posY < rect.y + rect.h && (jumpState == 1 || jumpState == 2)) {
+						posY = rect.y + rect.h;
+					} else if(posX + sizeX > rect.x && key[SDL_SCANCODE_RIGHT]) {
+						posX = rect.x - sizeX;
+					} else if(posX < rect.x + rect.w && key[SDL_SCANCODE_LEFT]) {
+						posX = rect.x + rect.w;
+					}
+				}*/
+
+				if(!demo) {
+					#ifndef __EMSCRIPTEN__
+						// Send player position to the server
+						if(connected && (posX != tmpX || posY != tmpY)) {
+							tmpX = posX;
+							tmpY = posY;
+							if(conn->write("send " + Serialize(gameFrame, posX, posY) + "|") < 0) {
+								frame = 4;
+								dialogBox.Set("Error while communicating with the server (" + NumToStr(easysock::lastError, 0) + " at " + NumToStr(easysock::lastErrorPlace, 0) + ")");
+								pthread_create(&thread, NULL, StartupThread, NULL);
+								return;
+							}
+						}
+					#endif
+
+					// On game frame change
+					if(gameFrame != lastGameFrame) {
+						lastGameFrame = gameFrame;
+
+						#ifndef __EMSCRIPTEN__
+							// Update Discord Presence
+							strcpy(DiscordSDK::RPC.details, ("Stage " + NumToStr(gameFrame, 0)).c_str());
+							DiscordSDK::UpdateRPC();
+						#endif
+					}
+				}
+			#ifndef __EMSCRIPTEN__
+			} else if(connected) {
+				// Get player position from the server
+				std::string status = conn->read();
+				if(easysock::lastError) {
+					dialogBox.Set("Error while communicating with the server (" + NumToStr(easysock::lastError, 0) + " at " + NumToStr(easysock::lastErrorPlace, 0) + ")");
+					spectating = false;
+					pthread_create(&thread, NULL, StartupThread, NULL);
+					return;
+				} else {
+					Unserialize(status, gameFrame, posX, posY);
 				}
 			}
+			#endif
 
 			// Reload counter
 			if(showCounter) {
-				counter1 = renderer.RenderText_Solid(counter_font, "X: " + NumToStr(posX), black);
-				counter2 = renderer.RenderText_Solid(counter_font, "Y: " + NumToStr(posY), black);
-				counter3 = renderer.RenderText_Solid(counter_font, "Frame: " + NumToStr(gameFrame) + "/" + NumToStr(gameFrames), black);
-				counter4 = renderer.RenderText_Solid(counter_font, "Jump state: " + NumToStr(jumpState), black);
-				counter5 = renderer.RenderText_Solid(counter_font, "Velocity: " + NumToStr(velocityY), black);
+				counter1 = engine.RenderSolidText(counterFont, "X: " + NumToStr(posX), black);
+				counter2 = engine.RenderSolidText(counterFont, "Y: " + NumToStr(posY), black);
+				counter3 = engine.RenderSolidText(counterFont, "Frame: " + NumToStr(gameFrame, 0) + "/" + NumToStr(GAME_FRAMES, 0), black);
+				counter4 = engine.RenderSolidText(counterFont, "Jump state: " + NumToStr(jumpState, 0), black);
+				counter5 = engine.RenderSolidText(counterFont, "Velocity: " + NumToStr(velocityY), black);
 			}
-
 			break;
 		case 2: // Main menu
 			// Change option
@@ -609,7 +623,7 @@ void Frame() {
 			if(key[SDL_SCANCODE_RETURN] && !enterKey) {
 				enterKey = true;
 				if(option == 1) { // Play / Back to game
-					if(!playing) playing = true;
+					if(!isPlaying) isPlaying = true;
 					frame = 1;
 					return;
 				} else if(option == 2) { // Options
@@ -642,7 +656,7 @@ void Frame() {
 			if((mouse & SDL_BUTTON(SDL_BUTTON_LEFT)) && !mouseLock) {
 				mouseLock = true;
 				if(mouseX > 300 && mouseX <= 500 && mouseY > 200 && mouseY <= 248) { // Back to game
-					if(!playing) playing = true;
+					if(!isPlaying) isPlaying = true;
 					frame = 1;
 					return;
 				} else if(mouseX > 300 && mouseX <= 500 && mouseY > 260 && mouseY <= 308) { // Options
@@ -653,10 +667,34 @@ void Frame() {
 					return;
 				}
 			}
-
 			break;
 		case 3: // Options
-			//
+			// Dragging trackbar
+			if(mouse & SDL_BUTTON(SDL_BUTTON_LEFT)) {
+				if(mouseX != lastX || mouseY != lastY) {
+					if(!mouseLock) {
+						if(mouseX >= 126 + volume && mouseX <= 135 + volume && mouseY >= 30 && mouseY <= 55) {
+							mouseLock = true;
+						} else if(mouseX >= 130 && mouseX <= 258 && mouseY >= 40 && mouseY <= 45) {
+							volume = mouseX - 130;
+						}
+					} else {
+						if(mouseX < 130) {
+							volume = 0;
+						} else if(mouseX > 258) {
+							volume = 128;
+						} else {
+							volume = mouseX - 130;
+						}
+					}
+					Mix_Volume(0, volume);
+					lastX = mouseX;
+					lastY = mouseY;
+				}
+			}
+
+			// Update volume label
+			volumeLabel = engine.RenderText(optionFont, "Volume (" + NumToStr(volume / 128.0 * 100, 0) + ")", white);
 			break;
 		case 4: // Dialog box
 			// If dialog box buttons is shown
@@ -686,39 +724,42 @@ void Frame() {
 			}
 
 			// Render text
-			text = renderer.RenderText(button_font, dialogBox.text, white);
-
+			text = engine.RenderText(buttonFont, dialogBox.text, white);
 			break;
 	}
 
-	////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+	//////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 	// Clear renderer
-	renderer.Clear();
+	engine.Clear();
 
 	switch(frame) {
 		case 1: // Game
-			// Render background (flip horizontally if gameFrame % 2 is 0)
-			renderer.Draw(bg, NULL, NULL, 0, NULL, gameFrame % 2 ? SDL_FLIP_NONE : SDL_FLIP_HORIZONTAL);
+			// Render background (flip horizontally if gameFrame is even)
+			engine.Draw(bg, NULL, NULL, 0, NULL, gameFrame % 2 ? SDL_FLIP_NONE : SDL_FLIP_HORIZONTAL);
 
 			// Render game frames
 			switch(gameFrame) {
 				case 1:
-					// Render right triangle
-					renderer.DrawTriangle(width - 110, height / 2 - 100, black, 100, TRIANGLE_RIGHT);
-					renderer.DrawTriangle(width - 350, height / 2 - 100, black, 100, TRIANGLE_UP);
-					renderer.DrawTriangle(250, height / 2 - 100, black, 100, TRIANGLE_DOWN);
-					renderer.DrawTriangle(10, height / 2 - 100, black, 100, TRIANGLE_LEFT);
+					// Render triangles
+					engine.DrawTriangle(width - 110, height / 2 - 100, black, 100, TRIANGLE_RIGHT);
+					engine.DrawTriangle(width - 350, height / 2 - 100, black, 100, TRIANGLE_UP);
+					engine.DrawTriangle(250, height / 2 - 100, black, 100, TRIANGLE_DOWN);
+					engine.DrawTriangle(10, height / 2 - 100, black, 100, TRIANGLE_LEFT);
 					break;
 				case 2:
-					// Render left and light triangle
-					renderer.DrawTriangle(10, height / 2 - 100, black, 100, TRIANGLE_LEFT);
-					renderer.DrawTriangle(width - 110, height / 2 - 100, black, 100, TRIANGLE_RIGHT);
+					// Render left and right triangle
+					engine.DrawTriangle(10, height / 2 - 100, black, 100, TRIANGLE_LEFT);
+					engine.DrawTriangle(width - 110, height / 2 - 100, black, 100, TRIANGLE_RIGHT);
 					break;
 				case 3:
 					// Render left triangle
-					renderer.DrawTriangle(10, height / 2 - 100, black, 100, TRIANGLE_LEFT);
+					engine.DrawTriangle(10, height / 2 - 100, black, 100, TRIANGLE_LEFT);
 					break;
+			}
+
+			for(uint8_t i = 0; i < collisionCounts[gameFrame - 1]; i++) {
+				SDL_RenderFillRect(engine.r, &collisions[gameFrame - 1][i]);
 			}
 
 			// Set player size and position
@@ -728,34 +769,28 @@ void Frame() {
 			rect.h = sizeY;
 
 			// Render player
-			renderer.Draw(player, NULL, &rect, 0, NULL, flip);
+			engine.Draw(player, NULL, &rect, 0, NULL, flip);
 
-			// If counter is shown
 			if(showCounter) {
 				// Loop through counter lines
 				for(int i = 1; i <= 5; i++) {
-					// Set counter line position
-					rect.x = 10;
-					rect.y = 4 + (18 * i);
-
 					// Get counter line by index
 					SDL_Texture* counter = (i == 1 ? counter1 : i == 2 ? counter2 : i == 3 ? counter3 : i == 4 ? counter4 : i == 5 ? counter5 : NULL);
 
-					// Get and set counter line size
+					// Display counter line
 					SDL_QueryTexture(counter, NULL, NULL, &rect.w, &rect.h);
-
-					// Render counter line
-					renderer.Draw(counter, NULL, &rect);
+					rect.x = 10;
+					rect.y = 4 + (18 * i);
+					engine.Draw(counter, NULL, &rect);
 				}
 			}
-
 			break;
 		case 2: // Main menu
 			// Render background
-			renderer.Draw(menubg, NULL, NULL);
+			engine.Draw(menubg, NULL, NULL);
 
 			// Render background overlay
-			renderer.Draw(overlay, NULL, NULL);
+			engine.Draw(overlay, NULL, NULL);
 
 			// Set button size and position
 			rect.x = 300;
@@ -764,7 +799,7 @@ void Frame() {
 			rect.h = 50;
 
 			// Render button
-			renderer.DrawButton(button_font, playing ? "Back to game" : "Play", rect, white, green, option == 1 ? red : green);
+			engine.DrawButton(buttonFont, isPlaying ? "Back to game" : "Play", rect, white, green, option == 1 ? red : green);
 
 			// Set button size and position
 			rect.x = 300;
@@ -773,7 +808,7 @@ void Frame() {
 			rect.h = 50;
 
 			// Render button
-			renderer.DrawButton(button_font, "Options", rect, white, green, option == 2 ? red : green);
+			engine.DrawButton(buttonFont, "Options", rect, white, green, option == 2 ? red : green);
 
 			// Set button size and position
 			rect.x = 300;
@@ -782,43 +817,48 @@ void Frame() {
 			rect.h = 50;
 
 			// Render button
-			renderer.DrawButton(button_font, "Exit", rect, white, green, option == 3 ? red : green);
-
+			engine.DrawButton(buttonFont, "Exit", rect, white, green, option == 3 ? red : green);
 			break;
 		case 3: // Options
 			// Render background
-			renderer.Draw(menubg, NULL, NULL);
+			engine.Draw(menubg, NULL, NULL);
 
 			// Render background overlay
-			renderer.Draw(overlay, NULL, NULL);
+			engine.Draw(overlay, NULL, NULL);
 
-			// Get and set text size
-			SDL_QueryTexture(text, NULL, NULL, &rect.w, &rect.h);
+			// Display volume label
+			SDL_QueryTexture(volumeLabel, NULL, NULL, &rect.w, &rect.h);
+			rect.x = 10;
+			rect.y = 30;
+			engine.Draw(volumeLabel, NULL, &rect);
 
-			// Set text position
-			rect.x = width / 2 - rect.w / 2;
-			rect.y = height / 2 - rect.h / 2;
+			// Display volume trackbar
+			rect.x = 130;
+			rect.y = 40;
+			rect.w = 128;
+			rect.h = 5;
+			engine.SetColor(dimwhite);
+			SDL_RenderFillRect(engine.r, &rect);
+			engine.SetColor(white);
 
-			// Display text
-			renderer.Draw(text, NULL, &rect);
-
+			rect.x = 126 + volume;
+			rect.y = 30;
+			rect.w = 9;
+			rect.h = 25;
+			engine.Draw(trackbar, NULL, &rect);
 			break;
 		case 4: // Dialog box
 			// Render background
-			renderer.Draw(menubg, NULL, NULL);
+			engine.Draw(menubg, NULL, NULL);
 
 			// Render background overlay
-			renderer.Draw(overlay, NULL, NULL);
-
-			// Get and set text size
-			SDL_QueryTexture(text, NULL, NULL, &rect.w, &rect.h);
-
-			// Set text position
-			rect.x = width / 2 - rect.w / 2;
-			rect.y = 260;
+			engine.Draw(overlay, NULL, NULL);
 
 			// Display text
-			renderer.Draw(text, NULL, &rect);
+			SDL_QueryTexture(text, NULL, NULL, &rect.w, &rect.h);
+			rect.x = width / 2 - rect.w / 2;
+			rect.y = 260;
+			engine.Draw(text, NULL, &rect);
 
 			// Set button size and position
 			rect.x = 300;
@@ -829,30 +869,24 @@ void Frame() {
 			// If dialog box buttons is shown
 			if(!dialogBox.buttonText.empty()) {
 				// Render button
-				renderer.DrawButton(button_font, dialogBox.buttonText, rect, white, green, red);
+				engine.DrawButton(buttonFont, dialogBox.buttonText, rect, white, green, red);
 			}
-
 			break;
 	}
 
-	// Render FPS counter
 	if(showCounter) {
-		// Set counter position
+		// Display FPS counter
+		SDL_QueryTexture(counter0, NULL, NULL, &rect.w, &rect.h);
 		rect.x = 10;
 		rect.y = 4;
-
-		// Get and set counter size
-		SDL_QueryTexture(fps_counter, NULL, NULL, &rect.w, &rect.h);
-
-		// Render counter
-		renderer.Draw(fps_counter, NULL, &rect);
+		engine.Draw(counter0, NULL, &rect);
 	}
 
 	// Show render
-	renderer.Present();
+	engine.Present();
 }
 
-////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 #ifndef __EMSCRIPTEN__
 	void* StartupThread(void*) {
@@ -864,17 +898,17 @@ void Frame() {
 			connected = false;
 		}
 
-		conn = easysock::tcp::connect("themaking.xyz", 34602);
+		conn = easysock::tcp::connect("themaking.tk", 34602);
 		if(conn == nullptr) {
-			dialogBox.Set("Cannot connect to the server (" + std::to_string(easysock::lastError) + " at " + std::to_string(easysock::lastErrorPlace) + ")");
+			dialogBox.Set("Cannot connect to the server (" + NumToStr(easysock::lastError, 0) + " at " + NumToStr(easysock::lastErrorPlace, 0) + ")");
 		} else {
-			if(conn->write("connect " + DiscordRPC::SpectateSecret + "|") < 0) {
-				dialogBox.Set("Error while communicating with the server (" + std::to_string(easysock::lastError) + " at " + std::to_string(easysock::lastErrorPlace) + ")");
+			if(conn->write("connect " + std::string(DiscordSDK::RPC.secrets.spectate) + "|") < 0) {
+				dialogBox.Set("Error while communicating with the server (" + NumToStr(easysock::lastError, 0) + " at " + NumToStr(easysock::lastErrorPlace, 0) + ")");
 				delete conn;
 			} else {
 				std::string status = conn->read();
 				if(easysock::lastError) {
-					dialogBox.Set("Error while communicating with the server (" + std::to_string(easysock::lastError) + " at " + std::to_string(easysock::lastErrorPlace) + ")");
+					dialogBox.Set("Error while communicating with the server (" + NumToStr(easysock::lastError, 0) + " at " + NumToStr(easysock::lastErrorPlace, 0) + ")");
 					delete conn;
 				} else if(status != "success") {
 					if(status == "invalid_token") {
@@ -896,39 +930,23 @@ void Frame() {
 
 	////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-	void DiscordRPC::OnReady(const DiscordUser* user) {
-		if(debug) std::cout << "Discord RPC is ready" << std::endl;
+	void DiscordSDK::OnError(void* data, enum EDiscordResult result) {
+		Log("[Discord] Error: " + std::string(DiscordSDK::GetResultStr(result)));
 	}
 
-	void DiscordRPC::OnDisconnect(int errcode, const char* message) {
-		DisplayError("[" + std::to_string(errcode) + "] Disconnected from Discord RPC: " + std::string(message));
-		TTF_CloseFont(button_font);
-		TTF_CloseFont(counter_font);
-		exit(1);
+	void DiscordSDK::OnRpcUpdate(void* data, enum EDiscordResult result) {
+		Log("[Discord] RPC Update (Result: " + std::string(DiscordSDK::GetResultStr(result)) + ")");
 	}
 
-	void DiscordRPC::OnError(int errcode, const char* message) {
-		DisplayError("[" + std::to_string(errcode) + "] Discord RPC Error: " + std::string(message));
-		TTF_CloseFont(button_font);
-		TTF_CloseFont(counter_font);
-		exit(1);
+	void DiscordSDK::OnUserUpdate(void* data) {
+		struct DiscordSDK::Application* app = (struct DiscordSDK::Application*)data;
+		struct DiscordUser user;
+		app->users->get_current_user(app->users, &user);
+		Log("[Discord] Current user: " + std::string(user.username) + "#" + std::string(user.discriminator) + " (" + std::to_string(user.id) + ")");
 	}
 
-	void DiscordRPC::OnJoin(const char* secret) {
-		// Ask to Join is not implemented
-
-		// if(debug) std::cout << "Join: " << secret << std::endl;
-	}
-
-	void DiscordRPC::OnJoinRequest(const DiscordUser* user) {
-		// Ask to Join is not implemented
-
-		/*
-		if(debug) {
-			std::cout << "Join request from " << user->username << "#" << user->discriminator
-			<< " (" << user->userId << ") " << user->avatar << std::endl;
-		}
-		*/
+	void DiscordSDK::OnJoinRequest(void* data, struct DiscordUser* user) {
+		Log("[Discord] Join request from " + std::string(user->username) + "#" + std::string(user->discriminator) + " (" + std::to_string(user->id) + ")");
 
 		/*
 		while(true) {
@@ -948,11 +966,15 @@ void Frame() {
 		*/
 	}
 
-	void DiscordRPC::OnSpectate(const char* secret) {
-		if(debug) std::cout << "Spectate: " << secret << std::endl;
+	void DiscordSDK::OnJoin(void* data, const char* secret) {
+		Log("[Discord] Join " + std::string(secret));
+	}
+
+	void DiscordSDK::OnSpectate(void* data, const char* secret) {
+		Log("[Discord] Spectate " + std::string(secret));
 
 		frame = 4;
-		renderer.RaiseWindow();
+		engine.RaiseWindow();
 
 		// TODO: Cancel button
 		dialogBox.Set("Connecting to the server...", "");
@@ -964,15 +986,15 @@ void Frame() {
 
 		conn = easysock::tcp::connect("themaking.xyz", 34602);
 		if(conn == nullptr) {
-			dialogBox.Set("Cannot connect to the server (" + std::to_string(easysock::lastError) + " at " + std::to_string(easysock::lastErrorPlace) + ")");
+			dialogBox.Set("Cannot connect to the server (" + NumToStr(easysock::lastError, 0) + " at " + NumToStr(easysock::lastErrorPlace, 0) + ")");
 		} else {
 			if(conn->write("listen " + std::string(secret) + "|") < 0) {
-				dialogBox.Set("Error while communicating with the server (" + std::to_string(easysock::lastError) + " at " + std::to_string(easysock::lastErrorPlace) + ")");
+				dialogBox.Set("Error while communicating with the server (" + NumToStr(easysock::lastError, 0) + " at " + NumToStr(easysock::lastErrorPlace, 0) + ")");
 				delete conn;
 			} else {
 				std::string status = conn->read();
 				if(easysock::lastError) {
-					dialogBox.Set("Error while communicating with the server (" + std::to_string(easysock::lastError) + " at " + std::to_string(easysock::lastErrorPlace) + ")");
+					dialogBox.Set("Error while communicating with the server (" + NumToStr(easysock::lastError, 0) + " at " + NumToStr(easysock::lastErrorPlace, 0) + ")");
 					delete conn;
 				} else if(status != "success") {
 					if(status == "invalid_token") {
@@ -988,5 +1010,9 @@ void Frame() {
 				}
 			}
 		}
+	}
+
+	void DiscordSDK::OnInvite(void* data, enum EDiscordActivityActionType type, struct DiscordUser* user, struct DiscordActivity* activity) {
+		Log("[Discord] Invite type " + std::to_string(type) + " to '" + std::string(activity->name) + "' from " + std::string(user->username) + "#" + std::string(user->discriminator) + " (" + std::to_string(user->id) + ")");
 	}
 #endif

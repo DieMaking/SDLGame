@@ -7,25 +7,24 @@ SDLGame is a simple platform game written in C++ using SDL2
 	* Install needed software
 		* Debian
 		```
-		# apt install build-essential git unzip libsdl2-2.0-0 libsdl2-dev libsdl2-image-2.0-0 libsdl2-image-dev libsdl2-mixer-2.0-0 libsdl2-mixer-dev libsdl2-ttf-2.0-0 libsdl2-ttf-dev
+		# apt install build-essential git libsdl2-2.0-0 libsdl2-dev libsdl2-image-2.0-0 libsdl2-image-dev libsdl2-mixer-2.0-0 libsdl2-mixer-dev libsdl2-ttf-2.0-0 libsdl2-ttf-dev
 		```
 		* Arch
 		```
-		# pacman -S base-devel git unzip sdl2 sdl2_image sdl2_mixer sdl2_ttf
+		# pacman -S base-devel git sdl2 sdl2_image sdl2_mixer sdl2_ttf
 		```
-	* Download discord-rpc library from [here](https://themaking.xyz/r/discord-rpc-linux-latest)
-	* Copy contents of the `linux-dynamic` folder from discord-rpc to `/usr/`
-* **Get the required files**
-	* Clone this repository OR Download ZIP of this repository
+	* Download Discord Game SDK from [here](https://dl-game-sdk.discordapp.net/latest/discord_game_sdk.zip)
+	* Extract the following files from the archive:
+		* `lib/x86_64/discord_game_sdk.so` to `/usr/lib/`
+		* `c/discord_game_sdk.h` to `/usr/include/`
+* **Get required files**
+	* Clone this repository
 	```
-	$ git clone https://github.com/DieMaking/SDLGame.git
-	OR
-	$ wget https://github.com/DieMaking/SDLGame/archive/master.zip && unzip master.zip
+	$ git clone --recursive https://github.com/DieMaking/SDLGame.git
 	```
 * **Compile and run**
-	* If you cloned this repository, `WORK_DIR` is `SDLGame`, if you downloaded ZIP of this repository, `WORD_DIR` is `SDLGame-master`
 	```
-	$ cd WORD_DIR
+	$ cd SDLGame
 	$ make BUILD=release
 	$ make run
 	```
@@ -35,26 +34,26 @@ SDLGame is a simple platform game written in C++ using SDL2
 	* Download MinGW from [here](https://sourceforge.net/projects/mingw-w64/files/Toolchains%20targetting%20Win32/Personal%20Builds/mingw-builds/8.1.0/threads-posix/dwarf/i686-8.1.0-release-posix-dwarf-rt_v6-rev0.7z/download) and unzip it to `C:\MinGW`
 	* Add `C:\MinGW` to your PATH ([tutorial](https://www.howtogeek.com/118594/how-to-edit-your-system-path-for-easy-command-line-access/))
 	* Download SDL2 archives:
-		* [SDL2](https://themaking.xyz/r/sdl-latest)
-		* [SDL2_image](https://themaking.xyz/r/sdl-image-latest)
-		* [SDL2_mixer](https://themaking.xyz/r/sdl-mixer-latest)
-		* [SDL2_ttf](https://themaking.xyz/r/sdl-ttf-latest)
+		[SDL2](https://www.libsdl.org/release/SDL2-devel-2.0.10-mingw.tar.gz),
+		[SDL2_image](https://www.libsdl.org/projects/SDL_image/release/SDL2_image-devel-2.0.5-mingw.tar.gz),
+		[SDL2_mixer](https://www.libsdl.org/projects/SDL_mixer/release/SDL2_mixer-devel-2.0.4-mingw.tar.gz),
+		[SDL2_ttf](https://www.libsdl.org/projects/SDL_ttf/release/SDL2_ttf-devel-2.0.15-mingw.tar.gz)
 	* Unpack the `i686-w64-mingw32` folder content from each archive to `C:\MinGW`
-	* Download discord-rpc archive from [here](https://themaking.xyz/r/discord-rpc-win-latest)
-	* Unpack the `win32-dynamic` folder content to `C:\MinGW`
+	* Download Discord Game SDK from [here](https://dl-game-sdk.discordapp.net/latest/discord_game_sdk.zip)
+	* Extract the following files from the archive:
+		* `lib\x86\discord_game_sdk.dll` to `C:\MinGW\bin\`
+		* `lib\x86\discord_game_sdk.dll.lib` to `C:\MinGW\lib\`
+		* `c\discord_game_sdk.h` to `C:\MinGW\include\`
 	* Download Git from [here](https://git-scm.com/download/win) and install it
-	* Right-click on desktop and click "Git Bash Here"
-* **Get the required files**
-	* Clone this repository OR Download ZIP of this repository
+	* Right-click on the desktop and click "Git Bash Here"
+* **Get required files**
+	* Clone this repository
 	```
-	$ git clone https://github.com/DieMaking/SDLGame.git
-	OR
-	$ wget https://github.com/DieMaking/SDLGame/archive/master.zip && unzip master.zip
+	$ git clone --recursive https://github.com/DieMaking/SDLGame.git
 	```
 * **Compile and run**
-	* If you cloned this repository, `WORK_DIR` is `SDLGame`, if you downloaded ZIP of this repository, `WORD_DIR` is `SDLGame-master`
 	```
-	$ cd WORD_DIR
+	$ cd SDLGame
 	$ make BUILD=release
 	$ make run
 	```
