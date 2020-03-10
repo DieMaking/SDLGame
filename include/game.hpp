@@ -29,7 +29,7 @@
 
 // Game title and version
 const char* title = "SDLGame";
-const char* version = "v0.0.8 Pre-release";
+const char* version = "v0.0.9 Pre-release";
 
 // Window dimensions
 int width = 800;
@@ -39,7 +39,7 @@ int height = 600;
 int sizeX = 38;
 int sizeY = 48;
 
-// Default player position
+// Player position
 double posX = 30;
 double posY = height - sizeY;
 double tmpX, tmpY;
@@ -64,7 +64,7 @@ int mouseX, mouseY;
 int lastX, lastY;
 uint32_t mouse;
 
-// Used to count FPS
+// For FPS counting
 uint32_t fpsFrameTicks;
 uint32_t fpsFrames;
 uint32_t fpsCount = 0;
@@ -124,7 +124,13 @@ uint32_t frame = DEFAULT_FRAME;
 uint32_t lastFrame;
 uint32_t lastGameFrame;
 uint32_t gameFrame = 1;
+int8_t gameFrameChange;
 #define GAME_FRAMES 3
+
+// Render targets (for the game frame scrolling)
+SDL_Texture* render1;
+SDL_Texture* render2;
+int renderPos = -1;
 
 // Gravity values
 uint8_t jumpState;
@@ -137,6 +143,7 @@ double delta = 0.02;
 // Demo walking direction
 bool demoDirection;
 
+// Collisions (TODO)
 uint8_t collisionCounts[GAME_FRAMES] = { 2, 1, 1 };
 SDL_Rect* collisions[GAME_FRAMES] = {
 	new SDL_Rect[2] {
@@ -150,20 +157,34 @@ SDL_Rect* collisions[GAME_FRAMES] = {
 };
 
 // Dialog box data
-struct DialogBoxData {
-	std::string text;
-	std::string buttonText;
-
-	DialogBoxData() {
-		this->text = "";
-		this->buttonText = "OK";
-	}
-
+struct {
+	std::string text = "";
+	std::string buttonText = "OK";
 	void Set(std::string text = "", std::string buttonText = "OK") {
 		this->text = text;
 		this->buttonText = buttonText;
 	}
 } dialogBox;
+
+#ifndef __EMSCRIPTEN__
+	// Used to count delay between frames
+	uint32_t frameTicks;
+
+	// Used to end main loop
+	bool quit;
+
+	// Server connection
+	easysock::tcp::Client* conn;
+	bool connected;
+	bool skipconnect;
+
+	// Is user a spectator?
+	bool spectating;
+
+	// Startup thread
+	pthread_t thread;
+	void* StartupThread(void*);
+#endif
 
 bool ReopenConsole() {
 	#ifdef SYSTEM_WINDOWS
@@ -195,15 +216,15 @@ bool ReopenConsole() {
 	return true;
 }
 
-void DisplayDialog(std::string msg) {
+void DisplayDialog(std::string msg, bool error = false) {
 	#if defined(__EMSCRIPTEN__)
 		EM_ASM({
 			if(alert) alert($0);
 		}, msg.c_str());
 	#elif defined(SYSTEM_WINDOWS)
-		MessageBox(NULL, msg.c_str(), title, 0);
+		MessageBox(NULL, msg.c_str(), title, error ? MB_ICONERROR : 0);
 	#else
-		SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, title, msg.c_str(), NULL);
+		SDL_ShowSimpleMessageBox(error ? SDL_MESSAGEBOX_ERROR : SDL_MESSAGEBOX_INFORMATION, title, msg.c_str(), NULL);
 	#endif
 }
 
@@ -214,7 +235,7 @@ void DisplayInfo(std::string msg) {
 
 void DisplayError(std::string err) {
 	std::cerr << err << std::endl;
-	DisplayDialog(err);
+	DisplayDialog(err, true);
 }
 
 void Log(std::string msg) {

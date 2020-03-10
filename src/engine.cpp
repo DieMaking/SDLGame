@@ -112,8 +112,105 @@ int Engine::Draw(SDL_Texture* texture, const SDL_Rect* srcrect, const SDL_Rect* 
 	return SDL_RenderCopyEx(this->r, texture, srcrect, dstrect, angle, center, flip);
 }
 
+int Engine::QueryTexture(SDL_Texture* txt, SDL_Rect* rect, uint32_t* format, int* access) {
+	return SDL_QueryTexture(txt, format, access, &rect->w, &rect->h);
+}
+
 SDL_Texture* Engine::CreateTexture(int w, int h, int access) {
 	return SDL_CreateTexture(this->r, SDL_PIXELFORMAT_RGBA8888, access, w, h);
+}
+
+SDL_Texture* Engine::ConnectTextures(SDL_Texture* txt1, SDL_Texture* txt2, int method, bool destroy) {
+	if(txt1 == NULL || txt2 == NULL) return NULL;
+
+	SDL_Rect r1;
+	if(this->QueryTexture(txt1, &r1) < 0) return NULL;
+
+	SDL_Rect r2;
+	if(this->QueryTexture(txt2, &r2) < 0) return NULL;
+
+	int w = 0, h = 0;
+	switch(method) {
+		case CONNECT_1ON2:
+		case CONNECT_2ON1:
+			w = (r2.w < r1.w ? r2.w : r1.w);
+			h = (r2.h < r1.h ? r2.h : r1.h);
+			break;
+		case CONNECT_1LEFT2:
+		case CONNECT_2LEFT1:
+		case CONNECT_1RIGHT2:
+		case CONNECT_2RIGHT1:
+			w = r1.w + r2.w;
+			h = (r2.h > r1.h ? r2.h : r1.h);
+			break;
+		case CONNECT_1TOP2:
+		case CONNECT_2TOP1:
+		case CONNECT_1BOTTOM2:
+		case CONNECT_2BOTTOM1:
+			w = (r2.w > r1.w ? r2.w : r1.w);
+			h = r1.h + r2.h;
+			break;
+	}
+
+	SDL_Texture* target = this->CreateTexture(w, h, SDL_TEXTUREACCESS_TARGET);
+	if(target == NULL) return NULL;
+	this->SetTarget(target);
+	this->Clear();
+
+	switch(method) {
+		case CONNECT_1ON2:
+			this->Draw(txt2);
+			this->Draw(txt1);
+			break;
+		case CONNECT_2ON1:
+			this->Draw(txt1);
+			this->Draw(txt2);
+			break;
+		case CONNECT_1LEFT2:
+		case CONNECT_2RIGHT1:
+			r1.x = 0;
+			r1.y = 0;
+			this->Draw(txt1, NULL, &r1);
+			r2.x = r1.w;
+			r2.y = 0;
+			this->Draw(txt2, NULL, &r2);
+			break;
+		case CONNECT_2LEFT1:
+		case CONNECT_1RIGHT2:
+			r2.x = 0;
+			r2.y = 0;
+			this->Draw(txt2, NULL, &r2);
+			r1.x = r2.w;
+			r1.y = 0;
+			this->Draw(txt1, NULL, &r1);
+			break;
+		case CONNECT_1TOP2:
+		case CONNECT_2BOTTOM1:
+			r1.x = 0;
+			r1.y = 0;
+			this->Draw(txt1, NULL, &r1);
+			r2.x = 0;
+			r2.y = r1.h;
+			this->Draw(txt2, NULL, &r2);
+			break;
+		case CONNECT_2TOP1:
+		case CONNECT_1BOTTOM2:
+			r2.x = 0;
+			r2.y = 0;
+			this->Draw(txt2, NULL, &r2);
+			r1.x = 0;
+			r1.y = r2.h;
+			this->Draw(txt1, NULL, &r1);
+			break;
+	}
+
+	this->Present();
+	this->SetTarget(NULL);
+	if(destroy) {
+		SDL_DestroyTexture(txt1);
+		SDL_DestroyTexture(txt2);
+	}
+	return target;
 }
 
 SDL_Texture* Engine::SurfaceToTexture(SDL_Surface* surface) {

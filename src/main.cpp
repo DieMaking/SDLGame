@@ -26,26 +26,6 @@ void FrameBegin();
 void FrameEnd();
 void Frame();
 
-#ifndef __EMSCRIPTEN__
-	// Used to count delay between frames
-	uint32_t frameTicks;
-
-	// Used to end main loop
-	bool quit;
-
-	// Server connection
-	easysock::tcp::Client* conn;
-	bool connected;
-	bool skipconnect;
-
-	// Is user a spectator?
-	bool spectating;
-
-	// Startup thread
-	pthread_t thread;
-	void* StartupThread(void*);
-#endif
-
 // Create engine
 Engine engine(title, SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, width, height);
 
@@ -76,6 +56,8 @@ int main(int argc, char* argv[]) {
 				ReopenConsole();
 			}
 			if(arg == "--demo" && !demo) {
+				isPlaying = true;
+				frame = 1;
 				demo = true;
 			}
 			if(arg == "--skip-connect" && !skipconnect) {
@@ -92,12 +74,14 @@ int main(int argc, char* argv[]) {
 	}
 
 	#ifndef __EMSCRIPTEN__
-		// Load INI file
-		if(ini.LoadFile("config.ini") == SI_FILE) {
-			ini.SetValue("config", "volume", "128");
-			ini.SaveFile("config.ini");
+		if(!demo) {
+			// Load INI file
+			if(ini.LoadFile("config.ini") == SI_FILE) {
+				ini.SetValue("config", "volume", "128");
+				ini.SaveFile("config.ini");
+			}
+			volume = strtol(ini.GetValue("config", "volume", "128"), NULL, 10);
 		}
-		volume = strtol(ini.GetValue("config", "volume", "128"), NULL, 10);
 
 		// Set resource paths
 		const char* bgData = "images/bg.png";
@@ -158,12 +142,6 @@ int main(int argc, char* argv[]) {
 	if(showCounter) {
 		// Create FPS counter
 		counter0 = engine.RenderSolidText(counterFont, "FPS: 0", frame == 1 ? black : dimwhite);
-	}
-
-	if(demo) {
-		// Set up demo mode
-		isPlaying = true;
-		frame = 1;
 	}
 
 	#ifdef __EMSCRIPTEN__
@@ -456,66 +434,98 @@ void Frame() {
 			#ifndef __EMSCRIPTEN__
 			if(!spectating) {
 			#endif
-				if(!demo) {
-					// Move right and left
-					if(key[SDL_SCANCODE_LEFT]) {
-						if(flip != SDL_FLIP_HORIZONTAL) flip = SDL_FLIP_HORIZONTAL;
-						posX -= speed * delta;
-					}
-					if(key[SDL_SCANCODE_RIGHT]) {
-						if(flip != SDL_FLIP_NONE) flip = SDL_FLIP_NONE;
-						posX += speed * delta;
-					}
-
-					// Jump
-					if(key[SDL_SCANCODE_UP] && !jumpKey && jumpState < 2) {
-						jumpKey = true;
-						jumpState++;
-						velocityY = -(jumpState == 2 ? jumpStrength * 2 : jumpStrength);
-					}
-					if(!key[SDL_SCANCODE_UP] && jumpKey) {
-						jumpKey = false;
-					}
-
-					// Gravity
-					posY += velocityY * delta;
-					if(posY < height - sizeY) {
-						if(jumpState != 3 && velocityY > 200) {
-							jumpState = 3;
+				// If game frame is not changing
+				if(gameFrameChange == 0) {
+					// If not in demo mode
+					if(!demo) {
+						// Move right and left
+						if(key[SDL_SCANCODE_LEFT]) {
+							if(flip != SDL_FLIP_HORIZONTAL) flip = SDL_FLIP_HORIZONTAL;
+							posX -= speed * delta;
 						}
-						velocityY += gravity * delta;
-					} else if(jumpState > 0) {
-						jumpState = 0;
-						velocityY = 0;
-					}
-				} else {
-					if(demoDirection) { // Left
-						if(flip != SDL_FLIP_HORIZONTAL) flip = SDL_FLIP_HORIZONTAL;
-						posX -= speed * delta;
-					} else { // Right
-						if(flip != SDL_FLIP_NONE) flip = SDL_FLIP_NONE;
-						posX += speed * delta;
-					}
+						if(key[SDL_SCANCODE_RIGHT]) {
+							if(flip != SDL_FLIP_NONE) flip = SDL_FLIP_NONE;
+							posX += speed * delta;
+						}
 
-					// Gravity
-					posY += velocityY * delta;
-
-					// Jumping/Falling
-					if(posY < height - sizeY) {
-						if(jumpState == 1 && velocityY > 100) {
-							velocityY = -(jumpStrength * 2);
+						// Jump
+						if(key[SDL_SCANCODE_UP] && !jumpKey && jumpState < 2) {
+							jumpKey = true;
 							jumpState++;
+							velocityY = -(jumpState == 2 ? jumpStrength * 2 : jumpStrength);
 						}
-						if(jumpState != 3 && velocityY > 200) {
-							jumpState = 3;
+						if(!key[SDL_SCANCODE_UP] && jumpKey) {
+							jumpKey = false;
 						}
-						velocityY += gravity * delta;
-					} else if(jumpState > 0) {
-						jumpState = 0;
-						velocityY = 0;
+
+						// Gravity
+						posY += velocityY * delta;
+						if(posY < height - sizeY) {
+							if(jumpState != 3 && velocityY > 200) {
+								jumpState = 3;
+							}
+							velocityY += gravity * delta;
+						} else if(jumpState > 0) {
+							jumpState = 0;
+							velocityY = 0;
+						}
 					} else {
-						jumpState++;
-						velocityY = -jumpStrength;
+						if(demoDirection) { // Left
+							if(flip != SDL_FLIP_HORIZONTAL) flip = SDL_FLIP_HORIZONTAL;
+							posX -= speed * delta;
+						} else { // Right
+							if(flip != SDL_FLIP_NONE) flip = SDL_FLIP_NONE;
+							posX += speed * delta;
+						}
+
+						// Gravity
+						posY += velocityY * delta;
+
+						// Jumping/Falling
+						if(posY < height - sizeY) {
+							if(jumpState == 1 && velocityY > 100) {
+								velocityY = -(jumpStrength * 2);
+								jumpState++;
+							}
+							if(jumpState != 3 && velocityY > 200) {
+								jumpState = 3;
+							}
+							velocityY += gravity * delta;
+						} else if(jumpState > 0) {
+							jumpState = 0;
+							velocityY = 0;
+						} else {
+							jumpState++;
+							velocityY = -jumpStrength;
+						}
+					}
+
+					// Go to next frame OR stop player on edge of window
+					if(gameFrame + 1 <= GAME_FRAMES) {
+						if(posX >= width - sizeX / 2) {
+							if(gameFrame == lastGameFrame) {
+								gameFrameChange = 1;
+							} else {
+								posX = width - sizeX / 2 - 1;
+							}
+						}
+					} else if(posX > width - sizeX) {
+						posX = width - sizeX;
+						if(demo) demoDirection = true;
+					}
+
+					// Go to previous frame OR stop player on edge of window
+					if(gameFrame - 1 > 0) {
+						if(posX <= sizeX / 2 - sizeX) {
+							if(gameFrame == lastGameFrame) {
+								gameFrameChange = -1;
+							} else {
+								posX = sizeX / 2 - sizeX + 1;
+							}
+						}
+					} else if(posX < 1) {
+						posX = 1;
+						if(demo) demoDirection = false;
 					}
 				}
 
@@ -524,27 +534,8 @@ void Frame() {
 					posY = height - sizeY;
 				}
 
-				// Go to next frame OR stop player on edge of window
-				if(gameFrame + 1 <= GAME_FRAMES) {
-					if(posX >= width - sizeX / 2) {
-						gameFrame++;
-						posX = sizeX / 2 - sizeX + 1;
-					}
-				} else if(posX > width - sizeX) {
-					posX = width - sizeX;
-				}
-
-				// Go to previous frame OR stop player on edge of window
-				if(gameFrame - 1 > 0) {
-					if(posX <= sizeX / 2 - sizeX) {
-						gameFrame--;
-						posX = width - sizeX / 2 - 1;
-					}
-				} else if(posX < 1) {
-					posX = 1;
-				}
-
-				/*if(CheckCollision()) {
+				/* TODO: Make this working
+				if(CheckCollision()) {
 					if(posY + sizeY > rect.y && jumpState == 3) {
 						posY = rect.y - sizeY;
 					} else if(posY < rect.y + rect.h && (jumpState == 1 || jumpState == 2)) {
@@ -556,6 +547,7 @@ void Frame() {
 					}
 				}*/
 
+				// If not in demo mode
 				if(!demo) {
 					#ifndef __EMSCRIPTEN__
 						// Send player position to the server
@@ -570,17 +562,17 @@ void Frame() {
 							}
 						}
 					#endif
+				}
 
-					// On game frame change
-					if(gameFrame != lastGameFrame) {
-						lastGameFrame = gameFrame;
+				// On game frame change
+				if(gameFrameChange == 0 && gameFrame != lastGameFrame) {
+					lastGameFrame = gameFrame;
 
-						#ifndef __EMSCRIPTEN__
-							// Update Discord Presence
-							strcpy(DiscordSDK::RPC.details, ("Stage " + NumToStr(gameFrame, 0)).c_str());
-							DiscordSDK::UpdateRPC();
-						#endif
-					}
+					#ifndef __EMSCRIPTEN__
+						// Update Discord Presence
+						strcpy(DiscordSDK::RPC.details, ("Stage " + NumToStr(gameFrame, 0)).c_str());
+						DiscordSDK::UpdateRPC();
+					#endif
 				}
 			#ifndef __EMSCRIPTEN__
 			} else if(connected) {
@@ -735,41 +727,75 @@ void Frame() {
 
 	switch(frame) {
 		case 1: // Game
-			// Render background (flip horizontally if gameFrame is even)
-			engine.Draw(bg, NULL, NULL, 0, NULL, gameFrame % 2 ? SDL_FLIP_NONE : SDL_FLIP_HORIZONTAL);
+			if(gameFrame == lastGameFrame) {
+				if(gameFrameChange != 0) {
+					render1 = engine.CreateTexture(width, height, SDL_TEXTUREACCESS_TARGET);
+					engine.SetTarget(render1);
+					engine.Clear();
+				}
+				do {
+					// Render background (flip horizontally if gameFrame is even)
+					engine.Draw(bg, NULL, NULL, 0, NULL, gameFrame % 2 ? SDL_FLIP_NONE : SDL_FLIP_HORIZONTAL);
 
-			// Render game frames
-			switch(gameFrame) {
-				case 1:
-					// Render triangles
-					engine.DrawTriangle(width - 110, height / 2 - 100, black, 100, TRIANGLE_RIGHT);
-					engine.DrawTriangle(width - 350, height / 2 - 100, black, 100, TRIANGLE_UP);
-					engine.DrawTriangle(250, height / 2 - 100, black, 100, TRIANGLE_DOWN);
-					engine.DrawTriangle(10, height / 2 - 100, black, 100, TRIANGLE_LEFT);
-					break;
-				case 2:
-					// Render left and right triangle
-					engine.DrawTriangle(10, height / 2 - 100, black, 100, TRIANGLE_LEFT);
-					engine.DrawTriangle(width - 110, height / 2 - 100, black, 100, TRIANGLE_RIGHT);
-					break;
-				case 3:
-					// Render left triangle
-					engine.DrawTriangle(10, height / 2 - 100, black, 100, TRIANGLE_LEFT);
-					break;
+					// Render game frames
+					switch(gameFrame) {
+						case 1:
+							// Render triangles
+							engine.DrawTriangle(width - 110, height / 2 - 100, black, 100, TRIANGLE_RIGHT);
+							engine.DrawTriangle(width - 350, height / 2 - 100, black, 100, TRIANGLE_UP);
+							engine.DrawTriangle(250, height / 2 - 100, black, 100, TRIANGLE_DOWN);
+							engine.DrawTriangle(10, height / 2 - 100, black, 100, TRIANGLE_LEFT);
+							break;
+						case 2:
+							// Render left and right triangle
+							engine.DrawTriangle(10, height / 2 - 100, black, 100, TRIANGLE_LEFT);
+							engine.DrawTriangle(width - 110, height / 2 - 100, black, 100, TRIANGLE_RIGHT);
+							break;
+						case 3:
+							// Render left triangle
+							engine.DrawTriangle(10, height / 2 - 100, black, 100, TRIANGLE_LEFT);
+							break;
+					}
+
+					for(uint8_t i = 0; i < collisionCounts[gameFrame - 1]; i++) {
+						SDL_RenderFillRect(engine.r, &collisions[gameFrame - 1][i]);
+					}
+
+					// Set player size and position
+					rect.x = posX;
+					rect.y = posY;
+					rect.w = sizeX;
+					rect.h = sizeY;
+
+					// Render player
+					engine.Draw(player, NULL, &rect, 0, NULL, flip);
+
+					if(gameFrameChange != 0 && gameFrame == lastGameFrame) {
+						gameFrame += gameFrameChange;
+						posX += (gameFrameChange < 0 ? width : -width);
+						render2 = engine.CreateTexture(width, height, SDL_TEXTUREACCESS_TARGET);
+						engine.SetTarget(render2);
+						engine.Clear();
+					} else {
+						break;
+					}
+				} while(1);
+				if(gameFrameChange != 0) {
+					render1 = engine.ConnectTextures(render1, render2, gameFrameChange < 0 ? CONNECT_2LEFT1 : CONNECT_2RIGHT1);
+					renderPos = (gameFrameChange < 0 ? width : 0);
+				}
 			}
-
-			for(uint8_t i = 0; i < collisionCounts[gameFrame - 1]; i++) {
-				SDL_RenderFillRect(engine.r, &collisions[gameFrame - 1][i]);
+			if(gameFrameChange != 0) {
+				rect.x = renderPos;
+				rect.y = 0;
+				rect.w = width;
+				rect.h = height;
+				engine.Draw(render1, &rect);
+				renderPos += gameFrameChange * (width / 20);
+				if(renderPos <= 0 || renderPos >= width) {
+					gameFrameChange = 0;
+				}
 			}
-
-			// Set player size and position
-			rect.x = posX;
-			rect.y = posY;
-			rect.w = sizeX;
-			rect.h = sizeY;
-
-			// Render player
-			engine.Draw(player, NULL, &rect, 0, NULL, flip);
 
 			if(showCounter) {
 				// Loop through counter lines
@@ -778,7 +804,7 @@ void Frame() {
 					SDL_Texture* counter = (i == 1 ? counter1 : i == 2 ? counter2 : i == 3 ? counter3 : i == 4 ? counter4 : i == 5 ? counter5 : NULL);
 
 					// Display counter line
-					SDL_QueryTexture(counter, NULL, NULL, &rect.w, &rect.h);
+					engine.QueryTexture(counter, &rect);
 					rect.x = 10;
 					rect.y = 4 + (18 * i);
 					engine.Draw(counter, NULL, &rect);
@@ -787,10 +813,10 @@ void Frame() {
 			break;
 		case 2: // Main menu
 			// Render background
-			engine.Draw(menubg, NULL, NULL);
+			engine.Draw(menubg);
 
 			// Render background overlay
-			engine.Draw(overlay, NULL, NULL);
+			engine.Draw(overlay);
 
 			// Set button size and position
 			rect.x = 300;
@@ -821,13 +847,13 @@ void Frame() {
 			break;
 		case 3: // Options
 			// Render background
-			engine.Draw(menubg, NULL, NULL);
+			engine.Draw(menubg);
 
 			// Render background overlay
-			engine.Draw(overlay, NULL, NULL);
+			engine.Draw(overlay);
 
 			// Display volume label
-			SDL_QueryTexture(volumeLabel, NULL, NULL, &rect.w, &rect.h);
+			engine.QueryTexture(volumeLabel, &rect);
 			rect.x = 10;
 			rect.y = 30;
 			engine.Draw(volumeLabel, NULL, &rect);
@@ -849,13 +875,13 @@ void Frame() {
 			break;
 		case 4: // Dialog box
 			// Render background
-			engine.Draw(menubg, NULL, NULL);
+			engine.Draw(menubg);
 
 			// Render background overlay
-			engine.Draw(overlay, NULL, NULL);
+			engine.Draw(overlay);
 
 			// Display text
-			SDL_QueryTexture(text, NULL, NULL, &rect.w, &rect.h);
+			engine.QueryTexture(text, &rect);
 			rect.x = width / 2 - rect.w / 2;
 			rect.y = 260;
 			engine.Draw(text, NULL, &rect);
@@ -876,7 +902,7 @@ void Frame() {
 
 	if(showCounter) {
 		// Display FPS counter
-		SDL_QueryTexture(counter0, NULL, NULL, &rect.w, &rect.h);
+		engine.QueryTexture(counter0, &rect);
 		rect.x = 10;
 		rect.y = 4;
 		engine.Draw(counter0, NULL, &rect);
