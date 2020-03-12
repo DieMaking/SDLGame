@@ -80,7 +80,8 @@ int main(int argc, char* argv[]) {
 				ini.SetValue("config", "volume", "128");
 				ini.SaveFile("config.ini");
 			}
-			volume = strtol(ini.GetValue("config", "volume", "128"), NULL, 10);
+			volume = strtoul(ini.GetValue("config", "volume", "128"), NULL, 10);
+			if(volume > 128) volume = 128;
 		}
 
 		// Set resource paths

@@ -117,7 +117,7 @@ TTF_Font* counterFont;
 
 // Sounds
 Mix_Chunk* bgsound;
-int volume = MIX_MAX_VOLUME;
+uint8_t volume = 128;
 
 // Frame values
 uint32_t frame = DEFAULT_FRAME;
