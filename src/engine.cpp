@@ -204,7 +204,6 @@ SDL_Texture* Engine::ConnectTextures(SDL_Texture* txt1, SDL_Texture* txt2, int m
 			break;
 	}
 
-	this->Present();
 	this->SetTarget(NULL);
 	if(destroy) {
 		SDL_DestroyTexture(txt1);

@@ -139,6 +139,10 @@ int main(int argc, char* argv[]) {
 	// Create overlay
 	overlay = engine.CreateOverlay(width, height);
 
+	// Create game frames cache
+	render1 = engine.CreateTexture(width, height, SDL_TEXTUREACCESS_TARGET);
+	render2 = engine.CreateTexture(width, height, SDL_TEXTUREACCESS_TARGET);
+
 	if(showCounter) {
 		// Create FPS counter
 		counter0 = engine.RenderSolidText(counterFont, "FPS: 0", frame == 1 ? black : dimwhite);
@@ -211,6 +215,8 @@ void MainLoop() {
 		SDL_DestroyTexture(menubg);
 		SDL_DestroyTexture(player);
 		SDL_DestroyTexture(overlay);
+		SDL_DestroyTexture(render1);
+		SDL_DestroyTexture(render2);
 		SDL_DestroyTexture(counter0);
 
 		// Destroy fonts
@@ -728,8 +734,9 @@ void Frame() {
 	switch(frame) {
 		case 1: // Game
 			if(gameFrame == lastGameFrame) {
+				// Executed when current game frame is about to render
 				if(gameFrameChange != 0) {
-					render1 = engine.CreateTexture(width, height, SDL_TEXTUREACCESS_TARGET);
+					// Render current game frame to the cache
 					engine.SetTarget(render1);
 					engine.Clear();
 				}
@@ -770,29 +777,39 @@ void Frame() {
 					// Render player
 					engine.Draw(player, NULL, &rect, 0, NULL, flip);
 
+					// Executed when new game frame is about to render
 					if(gameFrameChange != 0 && gameFrame == lastGameFrame) {
+						// Render new game frame to the cache
 						gameFrame += gameFrameChange;
 						posX += (gameFrameChange < 0 ? width : -width);
-						render2 = engine.CreateTexture(width, height, SDL_TEXTUREACCESS_TARGET);
 						engine.SetTarget(render2);
 						engine.Clear();
 					} else {
 						break;
 					}
 				} while(1);
+				// Executed when game frames has been rendered
 				if(gameFrameChange != 0) {
-					render1 = engine.ConnectTextures(render1, render2, gameFrameChange < 0 ? CONNECT_2LEFT1 : CONNECT_2RIGHT1);
-					renderPos = (gameFrameChange < 0 ? width : 0);
+					engine.SetTarget(NULL);
+					renderPos = 0;
 				}
 			}
 			if(gameFrameChange != 0) {
+				// Animate game frame change
 				rect.x = renderPos;
 				rect.y = 0;
 				rect.w = width;
 				rect.h = height;
-				engine.Draw(render1, &rect);
-				renderPos += gameFrameChange * (width / 20);
-				if(renderPos <= 0 || renderPos >= width) {
+				engine.Draw(render1, NULL, &rect);
+
+				rect.x = renderPos + (gameFrameChange < 0 ? -width : width);
+				rect.y = 0;
+				rect.w = width;
+				rect.h = height;
+				engine.Draw(render2, NULL, &rect);
+
+				renderPos -= gameFrameChange * (width / 20);
+				if(renderPos <= -width || renderPos >= width) {
 					gameFrameChange = 0;
 				}
 			}

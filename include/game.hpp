@@ -130,7 +130,7 @@ int8_t gameFrameChange;
 // Render targets (for the game frame scrolling)
 SDL_Texture* render1;
 SDL_Texture* render2;
-int renderPos = -1;
+int renderPos;
 
 // Gravity values
 uint8_t jumpState;
