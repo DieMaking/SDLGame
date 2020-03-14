@@ -5,29 +5,26 @@
 #include <cstdint>
 #include <discord_game_sdk.h>
 
-namespace DiscordSDK {
-	namespace {
-		struct IDiscordUserEvents user_events;
-		struct IDiscordActivityEvents activity_events;
-	}
-
-	struct Application {
-		struct IDiscordCore* core;
-		struct IDiscordUserManager* users;
-		struct IDiscordActivityManager* activities;
-	} App;
-	struct DiscordActivity RPC;
+class DiscordSDK {
+private:
+	struct IDiscordUserEvents user_events;
+	struct IDiscordActivityEvents activity_events;
+public:
+	struct IDiscordCore* core = NULL;
+	struct IDiscordUserManager* users = NULL;
+	struct IDiscordActivityManager* activities = NULL;
+	struct DiscordActivity rpc;
 
 	// Callbacks
-	void OnError(void* data, enum EDiscordResult result);
-	void OnRpcUpdate(void* data, enum EDiscordResult result);
-	void OnUserUpdate(void* data);
-	void OnJoinRequest(void* data, struct DiscordUser* user);
-	void OnJoin(void* data, const char* secret);
-	void OnSpectate(void* data, const char* secret);
-	void OnInvite(void* data, enum EDiscordActivityActionType type, struct DiscordUser* user, struct DiscordActivity* activity);
+	void (*OnError)(void* data, enum EDiscordResult result) = NULL;
+	void (*OnRpcUpdate)(void* data, enum EDiscordResult result) = NULL;
+	void (*OnUserUpdate)(void* data) = NULL;
+	void (*OnJoinRequest)(void* data, struct DiscordUser* user) = NULL;
+	void (*OnJoin)(void* data, const char* secret) = NULL;
+	void (*OnSpectate)(void* data, const char* secret) = NULL;
+	void (*OnInvite)(void* data, enum EDiscordActivityActionType type, struct DiscordUser* user, struct DiscordActivity* activity) = NULL;
 
-	enum EDiscordResult Init(int64_t id) {
+	void Init(int64_t id) {
 		memset(&user_events, 0, sizeof(user_events));
 		user_events.on_current_user_update = OnUserUpdate;
 
@@ -37,36 +34,43 @@ namespace DiscordSDK {
 		activity_events.on_activity_spectate = OnSpectate;
 		activity_events.on_activity_invite = OnInvite;
 
-		memset(&App, 0, sizeof(App));
-		memset(&RPC, 0, sizeof(RPC));
+		memset(&rpc, 0, sizeof(rpc));
 
 		struct DiscordCreateParams params;
 		DiscordCreateParamsSetDefault(&params);
 		params.client_id = id;
 		params.flags = DiscordCreateFlags_Default;
-		params.event_data = &App;
+		params.event_data = this;
 		params.user_events = &user_events;
 		params.activity_events = &activity_events;
-		enum EDiscordResult res = DiscordCreate(DISCORD_VERSION, &params, &App.core);
+		enum EDiscordResult res = DiscordCreate(DISCORD_VERSION, &params, &core);
 		if(res != DiscordResult_Ok) {
-			OnError((void*)&App, res);
+			OnError((void*)this, res);
 		} else {
-			App.users = App.core->get_user_manager(App.core);
-			App.activities = App.core->get_activity_manager(App.core);
+			this->users = core->get_user_manager(core);
+			this->activities = core->get_activity_manager(core);
 		}
-		return res;
 	}
 
-	void Destroy() {
-		App.core->destroy(App.core);
+	~DiscordSDK() {
+		if(core != NULL) core->destroy(core);
 	}
 
-	enum EDiscordResult RunTasks() {
-		enum EDiscordResult res = App.core->run_callbacks(App.core);
-		if(res != DiscordResult_Ok) {
-			OnError((void*)&App, res);
+	void RunTasks() {
+		if(core != NULL) {
+			enum EDiscordResult res = core->run_callbacks(core);
+			if(res != DiscordResult_Ok) {
+				OnError((void*)this, res);
+			}
 		}
-		return res;
+	}
+
+	void UpdateRPC() {
+		if(activities != NULL) activities->update_activity(activities, &rpc, this, OnRpcUpdate);
+	}
+
+	void ClearRPC() {
+		if(activities != NULL) activities->clear_activity(activities, this, OnRpcUpdate);
 	}
 
 	const char* GetResultStr(enum EDiscordResult res) {
@@ -162,14 +166,6 @@ namespace DiscordSDK {
 		}
 		return "";
 	}
-
-	void UpdateRPC() {
-		App.activities->update_activity(App.activities, &RPC, &App, OnRpcUpdate);
-	}
-
-	void ClearRPC() {
-		App.activities->clear_activity(App.activities, &App, OnRpcUpdate);
-	}
-}
+};
 
 #endif
