@@ -32,10 +32,10 @@ Engine engine(title, SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, width, he
 #ifndef __EMSCRIPTEN__
 	// Create INI parser
 	CSimpleIniA ini(true);
-#endif
 
-// Create Discord SDK
-DiscordSDK discord;
+	// Create Discord SDK
+	DiscordSDK discord(411983281886593024);
+#endif
 
 int main(int argc, char* argv[]) {
 	// Needed by rand() function
@@ -241,7 +241,7 @@ int main(int argc, char* argv[]) {
 		};
 
 		// Init Discord Game SDK
-		discord.Init(411983281886593024);
+		discord.Init();
 
 		// Update Discord Presence
 		discord.rpc.type = DiscordActivityType_Playing;

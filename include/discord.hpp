@@ -7,6 +7,7 @@
 
 class DiscordSDK {
 private:
+	struct DiscordCreateParams params;
 	struct IDiscordUserEvents user_events;
 	struct IDiscordActivityEvents activity_events;
 public:
@@ -24,36 +25,43 @@ public:
 	void (*OnSpectate)(void* data, const char* secret) = NULL;
 	void (*OnInvite)(void* data, enum EDiscordActivityActionType type, struct DiscordUser* user, struct DiscordActivity* activity) = NULL;
 
-	void Init(int64_t id) {
-		memset(&user_events, 0, sizeof(user_events));
-		user_events.on_current_user_update = OnUserUpdate;
-
-		memset(&activity_events, 0, sizeof(activity_events));
-		activity_events.on_activity_join_request = OnJoinRequest;
-		activity_events.on_activity_join = OnJoin;
-		activity_events.on_activity_spectate = OnSpectate;
-		activity_events.on_activity_invite = OnInvite;
-
+	DiscordSDK(int64_t id) {
 		memset(&rpc, 0, sizeof(rpc));
 
-		struct DiscordCreateParams params;
 		DiscordCreateParamsSetDefault(&params);
 		params.client_id = id;
 		params.flags = DiscordCreateFlags_Default;
 		params.event_data = this;
-		params.user_events = &user_events;
-		params.activity_events = &activity_events;
-		enum EDiscordResult res = DiscordCreate(DISCORD_VERSION, &params, &core);
-		if(res != DiscordResult_Ok) {
-			OnError((void*)this, res);
-		} else {
-			this->users = core->get_user_manager(core);
-			this->activities = core->get_activity_manager(core);
+	}
+
+	void Init() {
+		if(core == NULL) {
+			memset(&user_events, 0, sizeof(user_events));
+			user_events.on_current_user_update = OnUserUpdate;
+
+			memset(&activity_events, 0, sizeof(activity_events));
+			activity_events.on_activity_join_request = OnJoinRequest;
+			activity_events.on_activity_join = OnJoin;
+			activity_events.on_activity_spectate = OnSpectate;
+			activity_events.on_activity_invite = OnInvite;
+
+			params.user_events = &user_events;
+			params.activity_events = &activity_events;
+
+			enum EDiscordResult res = DiscordCreate(DISCORD_VERSION, &params, &core);
+			if(res != DiscordResult_Ok) {
+				OnError((void*)this, res);
+			} else {
+				this->users = core->get_user_manager(core);
+				this->activities = core->get_activity_manager(core);
+			}
 		}
 	}
 
 	~DiscordSDK() {
-		if(core != NULL) core->destroy(core);
+		if(core != NULL) {
+			core->destroy(core);
+		}
 	}
 
 	void RunTasks() {
@@ -66,11 +74,16 @@ public:
 	}
 
 	void UpdateRPC() {
-		if(activities != NULL) activities->update_activity(activities, &rpc, this, OnRpcUpdate);
+		if(activities != NULL) {
+			activities->update_activity(activities, &rpc, this, OnRpcUpdate);
+		}
 	}
 
 	void ClearRPC() {
-		if(activities != NULL) activities->clear_activity(activities, this, OnRpcUpdate);
+		if(activities != NULL) {
+			memset(&rpc, 0, sizeof(rpc));
+			activities->clear_activity(activities, this, OnRpcUpdate);
+		}
 	}
 
 	const char* GetResultStr(enum EDiscordResult res) {
