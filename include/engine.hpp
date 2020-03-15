@@ -1,12 +1,14 @@
 #ifndef __ENGINE_HPP
 #define __ENGINE_HPP
 
+#include <string>
 #include <SDL2/SDL.h>
 #include <SDL2/SDL_ttf.h>
 #include <SDL2/SDL_image.h>
-#include <SDL2/SDL_mixer.h>
-#include <SDL2/SDL_syswm.h>
-#include <string>
+#ifndef __EMSCRIPTEN__
+	#include <SDL2/SDL_mixer.h>
+	#include <SDL2/SDL_syswm.h>
+#endif
 
 enum { // Used by DrawTriangle function
 	TRIANGLE_UP, TRIANGLE_DOWN,
@@ -28,7 +30,9 @@ private:
 public:
 	SDL_Window* w;
 	SDL_Renderer* r;
-	SDL_SysWMinfo i;
+	#ifndef __EMSCRIPTEN__
+		SDL_SysWMinfo i;
+	#endif
 	std::string lastError;
 
 	Engine(const char* title, int x, int y, int w, int h);
@@ -49,8 +53,10 @@ public:
 	SDL_Texture* SurfaceToTexture(SDL_Surface* surface);
 	SDL_Texture* LoadTexture(const char* path);
 	SDL_Texture* LoadTexture(SDL_RWops* data);
-	Mix_Chunk* LoadSound(const char* path);
-	Mix_Chunk* LoadSound(SDL_RWops* data);
+	#ifndef __EMSCRIPTEN__
+		Mix_Chunk* LoadSound(const char* path);
+		Mix_Chunk* LoadSound(SDL_RWops* data);
+	#endif
 	TTF_Font* LoadFont(const char* path, int size);
 	TTF_Font* LoadFont(SDL_RWops* data, int size);
 	SDL_Texture* RenderText(TTF_Font* font, std::string text, SDL_Color color);

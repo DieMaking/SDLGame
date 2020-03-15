@@ -13,8 +13,10 @@
 <div id="winjs-container"></div>
 
 <script>
+	// Init WinJS
 	var winjs = new WinJS(document.querySelector("#winjs-container"));
 
+	// Create windows
 	var conWin = winjs.createWin({
 		title: "Console",
 		id: "conWin",
@@ -27,7 +29,6 @@
 		maximize: true,
 		minimize: true
 	});
-
 	var gameWin = winjs.createWin({
 		title: "SDLGame",
 		id: "gameWin",
@@ -45,9 +46,25 @@
 		minimize: true,
 	});
 
-	// Callback executed by the C++ code
+	// Load audio
+	var bgsound = new Audio("bgsound.mp3");
+	bgsound.preload = "auto";
+
+	// Callbacks executed by the C++ code
 	function sdlgame_on_exit() {
 		gameWin.close();
+	}
+	function sdlgame_bgsound_play(state) {
+		if(bgsound.readyState == 4) {
+			if(state) {
+				bgsound.play();
+			} else {
+				bgsound.pause();
+			}
+		}
+	}
+	function sdlgame_volume_change(volume) {
+		bgsound.volume = volume;
 	}
 
 	var canvasElem = document.querySelector("#canvas");

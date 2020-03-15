@@ -1,20 +1,18 @@
 #define SDL_MAIN_HANDLED
 
+#include <ctime>
+#include <cstdio>
+#include <iostream>
 #include <SDL2/SDL.h>
 #include <SDL2/SDL_ttf.h>
 #include <SDL2/SDL_image.h>
-#include <SDL2/SDL_mixer.h>
-
-#include <iostream>
-#include <cstdio>
-#include <ctime>
-
-#ifdef __EMSCRIPTEN__
-	#include <emscripten.h>
-	#include "../include/files.hpp"
-#else
+#ifndef __EMSCRIPTEN__
+	#include <SDL2/SDL_mixer.h>
 	#include "../include/easysock/tcp.hpp"
 	#include "../include/discord.hpp"
+#else
+	#include <emscripten.h>
+	#include "../include/files.hpp"
 #endif
 #include "../include/simpleini/SimpleIni.h"
 #include "../include/game.hpp"
@@ -35,6 +33,25 @@ Engine engine(title, SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, width, he
 
 	// Create Discord SDK
 	DiscordSDK discord(411983281886593024);
+#else
+	// Functions for getting/setting config values in browser localStorage
+	EM_JS(char*, sdlgame_get_cfg_val, (const char* name), {
+		var tmp = UTF8ToString(name);
+		if(localStorage[tmp]) {
+			var value = localStorage[tmp];
+			var len = lengthBytesUTF8(value) + 1;
+			var heap = _malloc(len);
+			stringToUTF8(value, heap, len);
+			return heap;
+		}
+		return null;
+	});
+	EM_JS(void, sdlgame_set_cfg_val, (const char* name, const char* value), {
+		var tmp = UTF8ToString(name);
+		if(tmp) {
+			localStorage[tmp] = UTF8ToString(value);
+		}
+	});
 #endif
 
 int main(int argc, char* argv[]) {
@@ -80,11 +97,12 @@ int main(int argc, char* argv[]) {
 		if(!demo) {
 			// Load INI file
 			if(ini.LoadFile("config.ini") == SI_FILE) {
-				ini.SetValue("config", "volume", "128");
+				ini.SetValue("config", "volume", "100");
 				ini.SaveFile("config.ini");
 			}
-			volume = strtoul(ini.GetValue("config", "volume", "128"), NULL, 10);
-			if(volume > 128) volume = 128;
+			// Get volume
+			volume = strtoul(ini.GetValue("config", "volume", "100"), NULL, 10);
+			if(volume > 100) volume = 100;
 		}
 
 		// Set resource paths
@@ -92,17 +110,27 @@ int main(int argc, char* argv[]) {
 		const char* menubgData = "images/menubg.png";
 		const char* playerData = "images/player.png";
 		const char* buttonFontData = "fonts/DroidSans.ttf";
+		const char* optionFontData = "fonts/DroidSans.ttf";
 		const char* counterFontData = "fonts/Visitor2.ttf";
-		const char* bgsoundData = "sounds/bgsound.mp3";
 	#else
+		if(!demo) {
+			// Get volume
+			char* val = sdlgame_get_cfg_val("volume");
+			if(val != NULL) {
+				volume = strtoul(val, NULL, 10);
+				free(val);
+				if(volume > 100) volume = 100;
+			}
+		}
+
 		// Load raw resources
 		SDL_RWops* bgData = SDL_RWFromConstMem(bg_raw, bg_raw_size);
 		SDL_RWops* menubgData = SDL_RWFromConstMem(menubg_raw, menubg_raw_size);
 		SDL_RWops* playerData = SDL_RWFromConstMem(player_raw, player_raw_size);
 		SDL_RWops* buttonFontData = SDL_RWFromConstMem(button_font_raw, button_font_raw_size);
+		SDL_RWops* optionFontData = SDL_RWFromConstMem(button_font_raw, button_font_raw_size);
 		SDL_RWops* counterFontData = SDL_RWFromConstMem(counter_font_raw, counter_font_raw_size);
-		SDL_RWops* bgsoundData = SDL_RWFromConstMem(bgsound_raw, bgsound_raw_size);
-		if(bgData == NULL || menubgData == NULL || playerData == NULL || buttonFontData == NULL || counterFontData == NULL || bgsoundData == NULL) {
+		if(bgData == NULL || menubgData == NULL || playerData == NULL || buttonFontData == NULL || optionFontData == NULL || counterFontData == NULL) {
 			DisplayError("Can't load required assets (" + std::string(SDL_GetError()) + ")");	
 			return 1;
 		}
@@ -119,26 +147,27 @@ int main(int argc, char* argv[]) {
 
 	// Load fonts
 	buttonFont = engine.LoadFont(buttonFontData, 22);
-	optionFont = engine.LoadFont(buttonFontData, 18);
+	optionFont = engine.LoadFont(optionFontData, 18);
 	counterFont = engine.LoadFont(counterFontData, 25);
 	if(buttonFont == NULL || optionFont == NULL || counterFont == NULL) {
 		DisplayError("Can't load required assets (" + std::string(TTF_GetError()) + ")");
 		return 1;
 	}
 
-	// Load sounds
-	bgsound = engine.LoadSound(bgsoundData);
-	if(bgsound == NULL) {
-		DisplayError("Can't load required assets (" + std::string(TTF_GetError()) + ")");
-		return 1;
-	}
+	#ifndef __EMSCRIPTEN__
+		// Load sounds
+		bgsound = engine.LoadSound("sounds/bgsound.mp3");
+		if(bgsound == NULL) {
+			DisplayError("Can't load required assets (" + std::string(Mix_GetError()) + ")");
+			return 1;
+		}
 
-	// Setup sounds
-	// Channel 0 = background music
-	// Channel 1 = other
-	Mix_AllocateChannels(2);
-	Mix_Volume(0, volume);
-	Mix_VolumeChunk(bgsound, 128);
+		// Setup sounds
+		// Channel 0 = background music
+		// Channel 1 = other
+		Mix_AllocateChannels(2);
+		Mix_Volume(0, volume / 100.0 * MIX_MAX_VOLUME);
+	#endif
 
 	// Create overlay
 	overlay = engine.CreateOverlay(width, height);
@@ -152,10 +181,7 @@ int main(int argc, char* argv[]) {
 		counter0 = engine.RenderSolidText(counterFont, "FPS: 0", frame == 1 ? black : dimwhite);
 	}
 
-	#ifdef __EMSCRIPTEN__
-		// Run main loop
-		emscripten_set_main_loop(&MainLoop, 0, 1);
-	#else
+	#ifndef __EMSCRIPTEN__
 		// Init easysock (needed on Windows)
 		easysock::init();
 
@@ -276,6 +302,9 @@ int main(int argc, char* argv[]) {
 				}
 			}
 		}
+	#else
+		// Run main loop
+		emscripten_set_main_loop(&MainLoop, 0, 1);
 	#endif
 
 	return 0;
@@ -309,27 +338,23 @@ void MainLoop() {
 		TTF_CloseFont(optionFont);
 		TTF_CloseFont(counterFont);
 
-		// Destroy sounds
-		Mix_FreeChunk(bgsound);
-
-		#ifdef __EMSCRIPTEN__
-			// Run JavaScript callback
-			EM_ASM({
-				if(sdlgame_on_exit) sdlgame_on_exit();
-			}, NULL);
-
-			// Exit from the loop
-			emscripten_cancel_main_loop();
-		#else
-			// Save config
-			ini.SetValue("config", "volume", NumToStr(volume, 0).c_str());
-			ini.SaveFile("config.ini");
+		#ifndef __EMSCRIPTEN__
+			// Destroy sounds
+			Mix_FreeChunk(bgsound);
 
 			// Quit easysock (needed on Windows)
 			easysock::exit();
 
 			// Exit from the loop
 			quit = true;
+		#else
+			// Close game window
+			EM_ASM({
+				if(sdlgame_on_exit) sdlgame_on_exit();
+			}, NULL);
+
+			// Exit from the loop
+			emscripten_cancel_main_loop();
 		#endif
 		return;
 	}
@@ -384,14 +409,19 @@ void FrameBegin() {
 				strcpy(discord.rpc.state, "In Game");
 				strcpy(discord.rpc.details, (spectating ? "Spectating someone" : (demo ? "Watching demo" : "Stage 1")));
 				discord.UpdateRPC();
-			#endif
 
-			// Play background music
-			if(!Mix_Playing(0)) {
-				Mix_PlayChannel(0, bgsound, -1);
-			} else {
-				Mix_Resume(0);
-			}
+				// Play background music
+				if(!Mix_Playing(0)) {
+					Mix_PlayChannel(0, bgsound, -1);
+				} else {
+					Mix_Resume(0);
+				}
+			#else
+				// Play background music
+				EM_ASM({
+					if(sdlgame_bgsound_play) sdlgame_bgsound_play(true);
+				}, NULL);
+			#endif
 			break;
 		case 2: // Main menu
 			#ifndef __EMSCRIPTEN__
@@ -435,7 +465,14 @@ void FrameBegin() {
 void FrameEnd() {
 	switch(lastFrame) {
 		case 1: // Game
-			Mix_Pause(0);
+			// Pause background music
+			#ifndef __EMSCRIPTEN__
+				Mix_Pause(0);
+			#else
+				EM_ASM({
+					if(sdlgame_bgsound_play) sdlgame_bgsound_play(false);
+				}, NULL);
+			#endif
 			break;
 		case 2: // Main menu
 			//
@@ -443,6 +480,14 @@ void FrameEnd() {
 		case 3: // Options
 			// Destroy trackbar
 			SDL_DestroyTexture(trackbar);
+
+			// Save config
+			#ifndef __EMSCRIPTEN__
+				ini.SetValue("config", "volume", NumToStr(volume, 0).c_str());
+				ini.SaveFile("config.ini");
+			#else
+				sdlgame_set_cfg_val("volume", NumToStr(volume, 0).c_str());
+			#endif
 			break;
 		case 4: // Dialog box
 			//
@@ -755,26 +800,32 @@ void Frame() {
 					if(!mouseLock) {
 						if(mouseX >= 126 + volume && mouseX <= 135 + volume && mouseY >= 30 && mouseY <= 55) {
 							mouseLock = true;
-						} else if(mouseX >= 130 && mouseX <= 258 && mouseY >= 40 && mouseY <= 45) {
+						} else if(mouseX >= 130 && mouseX <= 230 && mouseY >= 40 && mouseY <= 45) {
 							volume = mouseX - 130;
 						}
 					} else {
 						if(mouseX < 130) {
 							volume = 0;
-						} else if(mouseX > 258) {
-							volume = 128;
+						} else if(mouseX > 230) {
+							volume = 100;
 						} else {
 							volume = mouseX - 130;
 						}
 					}
-					Mix_Volume(0, volume);
+					#ifndef __EMSCRIPTEN__
+						Mix_Volume(0, volume / 100.0 * MIX_MAX_VOLUME);
+					#else
+						EM_ASM({
+							if(sdlgame_volume_change) sdlgame_volume_change($0);
+						}, volume / 100.0);
+					#endif
 					lastX = mouseX;
 					lastY = mouseY;
 				}
 			}
 
 			// Update volume label
-			volumeLabel = engine.RenderText(optionFont, "Volume (" + NumToStr(volume / 128.0 * 100, 0) + ")", white);
+			volumeLabel = engine.RenderText(optionFont, "Volume (" + NumToStr(volume, 0) + ")", white);
 			break;
 		case 4: // Dialog box
 			// If dialog box buttons is shown
@@ -960,7 +1011,7 @@ void Frame() {
 			// Display volume trackbar
 			rect.x = 130;
 			rect.y = 40;
-			rect.w = 128;
+			rect.w = 100;
 			rect.h = 5;
 			engine.SetColor(dimwhite);
 			SDL_RenderFillRect(engine.r, &rect);

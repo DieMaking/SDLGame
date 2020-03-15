@@ -11,7 +11,9 @@ Engine::Engine(const char* title, int x, int y, int w, int h) {
 Engine::~Engine() {
 	SDL_DestroyRenderer(this->r);
 	SDL_DestroyWindow(this->w);
-	Mix_CloseAudio();
+	#ifndef __EMSCRIPTEN__
+		Mix_CloseAudio();
+	#endif
 	TTF_Quit();
 	SDL_Quit();
 }
@@ -31,14 +33,16 @@ bool Engine::Init() {
 		return false;
 	}
 
-	// Get window info
-	SDL_VERSION(&this->i.version);
-	if(!SDL_GetWindowWMInfo(this->w, &this->i)) {
-		SDL_DestroyWindow(this->w);
-		SDL_Quit();
-		this->lastError = "Can't create window (" + std::string(SDL_GetError()) + ")";
-		return false;
-	}
+	#ifndef __EMSCRIPTEN__
+		// Get window info
+		SDL_VERSION(&this->i.version);
+		if(!SDL_GetWindowWMInfo(this->w, &this->i)) {
+			SDL_DestroyWindow(this->w);
+			SDL_Quit();
+			this->lastError = "Can't get window info (" + std::string(SDL_GetError()) + ")";
+			return false;
+		}
+	#endif
 
 	// Create renderer
 	this->r = SDL_CreateRenderer(this->w, -1, SDL_RENDERER_ACCELERATED);
@@ -67,15 +71,17 @@ bool Engine::Init() {
 		return false;
 	}
 
-	// Init sound engine
-	if(Mix_OpenAudio(22050, MIX_DEFAULT_FORMAT, 2, 4096) < 0) {
-		SDL_DestroyRenderer(this->r);
-		SDL_DestroyWindow(this->w);
-		TTF_Quit();
-		SDL_Quit();
-		this->lastError = "Can't init sound engine (" + std::string(Mix_GetError()) + ")";
-		return false;
-	}
+	#ifndef __EMSCRIPTEN__
+		// Init sound engine
+		if(Mix_OpenAudio(22050, MIX_DEFAULT_FORMAT, 2, 4096) < 0) {
+			SDL_DestroyRenderer(this->r);
+			SDL_DestroyWindow(this->w);
+			TTF_Quit();
+			SDL_Quit();
+			this->lastError = "Can't init sound engine (" + std::string(Mix_GetError()) + ")";
+			return false;
+		}
+	#endif
 
 	return true;
 }
@@ -231,13 +237,15 @@ SDL_Texture* Engine::LoadTexture(SDL_RWops* data) {
 	return (surface != NULL ? this->SurfaceToTexture(surface) : NULL);
 }
 
-Mix_Chunk* Engine::LoadSound(const char* path) {
-	return Mix_LoadWAV(path);
-}
+#ifndef __EMSCRIPTEN__
+	Mix_Chunk* Engine::LoadSound(const char* path) {
+		return Mix_LoadWAV(path);
+	}
 
-Mix_Chunk* Engine::LoadSound(SDL_RWops* data) {
-	return Mix_LoadWAV_RW(data, 1);
-}
+	Mix_Chunk* Engine::LoadSound(SDL_RWops* data) {
+		return Mix_LoadWAV_RW(data, 1);
+	}
+#endif
 
 TTF_Font* Engine::LoadFont(const char* path, int size) {
 	return TTF_OpenFont(path, size);

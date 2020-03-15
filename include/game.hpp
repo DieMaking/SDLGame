@@ -1,17 +1,18 @@
 #ifndef __GAME_HPP
 #define __GAME_HPP
 
+#include <map>
+#include <ctime>
+#include <vector>
+#include <cstdlib>
+#include <cstdint>
+#include <iostream>
 #include <SDL2/SDL.h>
 #include <SDL2/SDL_ttf.h>
 #include <SDL2/SDL_image.h>
-
-#include <iostream>
-#include <cstdlib>
-#include <cstdint>
-#include <vector>
-#include <ctime>
-#include <map>
-
+#ifndef __EMSCRIPTEN__
+	#include <SDL2/SDL_mixer.h>
+#endif
 #if defined(WIN32) || defined(_WIN32) || defined(__WIN32) && !defined(__CYGWIN__)
 	#define SYSTEM_WINDOWS
 	#include <windows.h>
@@ -19,12 +20,12 @@
 #endif
 
 // Starting frame and key used for enabling/disabling counter
-#ifdef __EMSCRIPTEN__
-	#define DEFAULT_FRAME 2
-	#define COUNTER_KEYCODE SDL_SCANCODE_GRAVE
-#else
+#ifndef __EMSCRIPTEN__
 	#define DEFAULT_FRAME 4
 	#define COUNTER_KEYCODE SDL_SCANCODE_F1
+#else
+	#define DEFAULT_FRAME 2
+	#define COUNTER_KEYCODE SDL_SCANCODE_GRAVE
 #endif
 
 // Game title and version
@@ -116,8 +117,10 @@ TTF_Font* optionFont;
 TTF_Font* counterFont;
 
 // Sounds
-Mix_Chunk* bgsound;
-uint8_t volume = 128;
+#ifndef __EMSCRIPTEN__
+	Mix_Chunk* bgsound;
+#endif
+uint8_t volume = 100;
 
 // Frame values
 uint32_t frame = DEFAULT_FRAME;
