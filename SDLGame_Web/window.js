@@ -103,7 +103,8 @@ class WinJS {
 
 		var maximized = false;
 		var minimized = false;
-		var oldX, oldY;
+		var maximizeX, maximizeY;
+		var minimizeX, minimizeY;
 
 		// Helper functions
 		var setPos = function(nx, ny) {
@@ -182,8 +183,8 @@ class WinJS {
 			if(WinJS.checkCallback(maximize, maximized, win)) {
 				if(!maximized) {
 					// Save window position
-					oldX = x;
-					oldY = y;
+					maximizeX = x;
+					maximizeY = y;
 
 					// Change window position
 					setPos(0, 0);
@@ -197,7 +198,7 @@ class WinJS {
 					maximizeIcon.className = "winjs-i-unmaximize";
 				} else {
 					// Change window position
-					setPos(oldX, oldY);
+					setPos(maximizeX, maximizeY);
 
 					// Change inner window size
 					body.style.width = w + "px";
@@ -223,8 +224,8 @@ class WinJS {
 					}
 
 					// Save window position
-					oldX = x;
-					oldY = y;
+					minimizeX = x;
+					minimizeY = y;
 
 					// Change window position
 					setPos(self.minimizedW, self.desk.clientHeight - ((31 + 10) * self.minimizedH))
@@ -234,7 +235,7 @@ class WinJS {
 					self.minimizedW += 10 + win.offsetWidth;
 				} else {
 					// Change window position
-					setPos(oldX, oldY);
+					setPos(minimizeX, minimizeY);
 
 					// Remove window from the pseudo task bar
 					var i = self.minimizedWindows.indexOf(id);

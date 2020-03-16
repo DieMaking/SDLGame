@@ -21,7 +21,11 @@
 
 // Starting frame and key used for enabling/disabling counter
 #ifndef __EMSCRIPTEN__
-	#define DEFAULT_FRAME 4
+	#ifndef NDISCORD
+		#define DEFAULT_FRAME 4
+	#else
+		#define DEFAULT_FRAME 2
+	#endif
 	#define COUNTER_KEYCODE SDL_SCANCODE_F1
 #else
 	#define DEFAULT_FRAME 2
@@ -30,7 +34,7 @@
 
 // Game title and version
 const char* title = "SDLGame";
-const char* version = "v0.0.9 Pre-release";
+const char* version = "v0.0.10.0";
 
 // Window dimensions
 int width = 800;
@@ -143,6 +147,10 @@ double speed = 200.0;
 double jumpStrength = 350.0;
 double delta = 0.02;
 
+// Is user a spectator?
+bool spectating;
+bool connected;
+
 // Demo walking direction
 bool demoDirection;
 
@@ -178,15 +186,13 @@ struct {
 
 	// Server connection
 	easysock::tcp::Client* conn;
-	bool connected;
 	bool skipconnect;
 
-	// Is user a spectator?
-	bool spectating;
-
-	// Startup thread
-	pthread_t thread;
-	void* StartupThread(void*);
+	#ifndef NDISCORD
+		// Startup thread
+		pthread_t thread;
+		void* StartupThread(void*);
+	#endif
 #endif
 
 bool ReopenConsole() {

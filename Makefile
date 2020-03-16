@@ -6,7 +6,7 @@ WIN_TMP = temp
 CR = g++
 CRFLAGS = -Wall -Wextra -Wpedantic -Wno-unused-parameter -Wno-write-strings -std=c++11 -pipe
 LRFLAGS =
-LRLIBS = -lSDL2 -lSDL2_image -lSDL2_ttf -lSDL2_mixer -ldiscord_game_sdk -pthread
+LRLIBS = -lSDL2 -lSDL2_image -lSDL2_ttf -lSDL2_mixer -pthread
 ARGS = --debug
 
 ifeq ($(BUILD), release)
@@ -17,6 +17,12 @@ else
 	# Debug build - no optimization and debugging symbols
 	CRFLAGS += -Og -ggdb3 -fno-inline -fno-omit-frame-pointer
 	LRFLAGS += -Og -ggdb3
+endif
+
+ifeq ($(DISCORD), no)
+	CRFLAGS += -DNDISCORD
+else
+	LRLIBS += -ldiscord_game_sdk
 endif
 
 ifeq ($(MSYSTEM), MINGW32)

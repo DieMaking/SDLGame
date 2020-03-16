@@ -1,2 +1,35 @@
-1 ICON "icon.ico"
+1 ICON icon.ico
 1 MANIFEST SDLGame.exe.manifest
+1 VERSIONINFO
+	FILEVERSION    0,0,10,0
+	PRODUCTVERSION 0,0,10,0
+	FILEFLAGSMASK 0x3fL
+	#ifdef NDEBUG
+		FILEFLAGS 0x0L
+	#else
+		FILEFLAGS 0x1L
+	#endif
+	FILEOS 0x4L
+	FILETYPE 0x1L
+	FILESUBTYPE 0x0L
+{
+	BLOCK "StringFileInfo"
+	{
+		BLOCK "040904b0"
+		{
+			VALUE "Comments",         "SDLGame\0"
+			VALUE "CompanyName",      "TheMaking\0"
+			VALUE "FileDescription",  "SDLGame\0"
+			VALUE "FileVersion",      "0.0.10.0\0"
+			VALUE "InternalName",     "SDLGame\0"
+			VALUE "LegalCopyright",   "Copyright (c) 2020 TheMaking\0"
+			VALUE "OriginalFilename", "SDLGame.exe\0"
+			VALUE "ProductName",      "SDLGame\0"
+			VALUE "ProductVersion",   "0.0.10.0\0"
+		}
+	}
+	BLOCK "VarFileInfo"
+	{
+		VALUE "Translation", 0x409, 1200
+	}
+}

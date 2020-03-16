@@ -9,12 +9,14 @@
 #ifndef __EMSCRIPTEN__
 	#include <SDL2/SDL_mixer.h>
 	#include "../include/easysock/tcp.hpp"
-	#include "../include/discord.hpp"
+	#include "../include/simpleini/SimpleIni.h"
+	#ifndef NDISCORD
+		#include "../include/discord.hpp"
+	#endif
 #else
 	#include <emscripten.h>
 	#include "../include/files.hpp"
 #endif
-#include "../include/simpleini/SimpleIni.h"
 #include "../include/game.hpp"
 #include "../include/engine.hpp"
 
@@ -31,8 +33,10 @@ Engine engine(title, SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, width, he
 	// Create INI parser
 	CSimpleIniA ini(true);
 
-	// Create Discord SDK
-	DiscordSDK discord(411983281886593024);
+	#ifndef NDISCORD
+		// Create Discord SDK
+		DiscordSDK discord(411983281886593024);
+	#endif
 #else
 	// Functions for getting/setting config values in browser localStorage
 	EM_JS(char*, sdlgame_get_cfg_val, (const char* name), {
@@ -185,104 +189,108 @@ int main(int argc, char* argv[]) {
 		// Init easysock (needed on Windows)
 		easysock::init();
 
-		// Discord Game SDK callbacks
-		discord.OnError = [](void* data, enum EDiscordResult result) {
-			Log("[Discord] Error: " + std::string(discord.GetResultStr(result)));
-		};
-		discord.OnRpcUpdate = [](void* data, enum EDiscordResult result) {
-			Log("[Discord] RPC Update (Result: " + std::string(discord.GetResultStr(result)) + ")");
-		};
-		discord.OnUserUpdate = [](void* data) {
-			DiscordSDK* app = (DiscordSDK*)data;
-			struct DiscordUser user;
-			app->users->get_current_user(app->users, &user);
-			Log("[Discord] Current user: " + std::string(user.username) + "#" + std::string(user.discriminator) + " (" + std::to_string(user.id) + ")");
-		};
-		discord.OnJoinRequest = [](void* data, struct DiscordUser* user) {
-			Log("[Discord] Join request from " + std::string(user->username) + "#" + std::string(user->discriminator) + " (" + std::to_string(user->id) + ")");
+		#ifndef NDISCORD
+			// Discord Game SDK callbacks
+			discord.OnError = [](void* data, enum EDiscordResult result) {
+				Log("[Discord] Error: " + std::string(discord.GetResultStr(result)));
+			};
+			discord.OnRpcUpdate = [](void* data, enum EDiscordResult result) {
+				Log("[Discord] RPC Update (Result: " + std::string(discord.GetResultStr(result)) + ")");
+			};
+			discord.OnUserUpdate = [](void* data) {
+				DiscordSDK* app = (DiscordSDK*)data;
+				struct DiscordUser user;
+				app->users->get_current_user(app->users, &user);
+				Log("[Discord] Current user: " + std::string(user.username) + "#" + std::string(user.discriminator) + " (" + std::to_string(user.id) + ")");
+			};
+			discord.OnJoinRequest = [](void* data, struct DiscordUser* user) {
+				Log("[Discord] Join request from " + std::string(user->username) + "#" + std::string(user->discriminator) + " (" + std::to_string(user->id) + ")");
 
-			/*
-			while(true) {
-				std::cout << "Accept? (y/n)" << std::endl;
+				/*
+				while(true) {
+					std::cout << "Accept? (y/n)" << std::endl;
 
-				std::string line;
-				std::getline(std::cin, line);
+					std::string line;
+					std::getline(std::cin, line);
 
-				if(line == "y") {
-					Discord_Respond(user->userId, DISCORD_REPLY_YES);
-					break;
-				} else if(line == "n") {
-					Discord_Respond(user->userId, DISCORD_REPLY_NO);
-					break;
-				}
-			}
-			*/
-		};
-		discord.OnJoin = [](void* data, const char* secret) {
-			Log("[Discord] Join " + std::string(secret));
-		};
-		discord.OnSpectate = [](void* data, const char* secret) {
-			Log("[Discord] Spectate " + std::string(secret));
-
-			frame = 4;
-			engine.RaiseWindow();
-
-			// TODO: Cancel button
-			dialogBox.Set("Connecting to the server...", "");
-
-			if(connected) {
-				delete conn;
-				connected = false;
-			}
-
-			conn = easysock::tcp::connect("themaking.xyz", 34602);
-			if(conn == nullptr) {
-				dialogBox.Set("Cannot connect to the server (" + NumToStr(easysock::lastError, 0) + " at " + NumToStr(easysock::lastErrorPlace, 0) + ")");
-			} else {
-				if(conn->write("listen " + std::string(secret) + "|") < 0) {
-					dialogBox.Set("Error while communicating with the server (" + NumToStr(easysock::lastError, 0) + " at " + NumToStr(easysock::lastErrorPlace, 0) + ")");
-					delete conn;
-				} else {
-					std::string status = conn->read();
-					if(easysock::lastError) {
-						dialogBox.Set("Error while communicating with the server (" + NumToStr(easysock::lastError, 0) + " at " + NumToStr(easysock::lastErrorPlace, 0) + ")");
-						delete conn;
-					} else if(status != "success") {
-						if(status == "invalid_token") {
-							dialogBox.Set("Invalid token (try observing again)");
-						} else {
-							dialogBox.Set("Internal server error");
-						}
-						delete conn;
-					} else {
-						connected = true;
-						spectating = true;
-						frame = 1;
+					if(line == "y") {
+						Discord_Respond(user->userId, DISCORD_REPLY_YES);
+						break;
+					} else if(line == "n") {
+						Discord_Respond(user->userId, DISCORD_REPLY_NO);
+						break;
 					}
 				}
+				*/
+			};
+			discord.OnJoin = [](void* data, const char* secret) {
+				Log("[Discord] Join " + std::string(secret));
+			};
+			discord.OnSpectate = [](void* data, const char* secret) {
+				Log("[Discord] Spectate " + std::string(secret));
+
+				/*
+				frame = 4;
+				engine.RaiseWindow();
+
+				// TODO: Cancel button
+				dialogBox.Set("Connecting to the server...", "");
+
+				if(connected) {
+					delete conn;
+					connected = false;
+				}
+
+				conn = easysock::tcp::connect("themaking.xyz", 34602);
+				if(conn == nullptr) {
+					dialogBox.Set("Cannot connect to the server (" + NumToStr(easysock::lastError, 0) + " at " + NumToStr(easysock::lastErrorPlace, 0) + ")");
+				} else {
+					if(conn->write("listen " + std::string(secret) + "|") < 0) {
+						dialogBox.Set("Error while communicating with the server (" + NumToStr(easysock::lastError, 0) + " at " + NumToStr(easysock::lastErrorPlace, 0) + ")");
+						delete conn;
+					} else {
+						std::string status = conn->read();
+						if(easysock::lastError) {
+							dialogBox.Set("Error while communicating with the server (" + NumToStr(easysock::lastError, 0) + " at " + NumToStr(easysock::lastErrorPlace, 0) + ")");
+							delete conn;
+						} else if(status != "success") {
+							if(status == "invalid_token") {
+								dialogBox.Set("Invalid token (try observing again)");
+							} else {
+								dialogBox.Set("Internal server error");
+							}
+							delete conn;
+						} else {
+							connected = true;
+							spectating = true;
+							frame = 1;
+						}
+					}
+				}
+				*/
+			};
+			discord.OnInvite = [](void* data, enum EDiscordActivityActionType type, struct DiscordUser* user, struct DiscordActivity* activity) {
+				Log("[Discord] Invite type " + std::to_string(type) + " to '" + std::string(activity->name) + "' from " + std::string(user->username) + "#" + std::string(user->discriminator) + " (" + std::to_string(user->id) + ")");
+			};
+
+			// Init Discord Game SDK
+			discord.Init();
+
+			// Update Discord Presence
+			discord.rpc.type = DiscordActivityType_Playing;
+			discord.rpc.timestamps.start = time(0);
+			strcpy(discord.rpc.assets.large_image, "square_icon");
+			strcpy(discord.rpc.assets.large_text, version);
+			RandomStr(discord.rpc.secrets.match, 32);
+			RandomStr(discord.rpc.secrets.join, 32);
+			RandomStr(discord.rpc.secrets.spectate, 32);
+			discord.UpdateRPC();
+
+			if(!demo && !skipconnect) {
+				// Run startup thread
+				pthread_create(&thread, NULL, StartupThread, NULL);
 			}
-		};
-		discord.OnInvite = [](void* data, enum EDiscordActivityActionType type, struct DiscordUser* user, struct DiscordActivity* activity) {
-			Log("[Discord] Invite type " + std::to_string(type) + " to '" + std::string(activity->name) + "' from " + std::string(user->username) + "#" + std::string(user->discriminator) + " (" + std::to_string(user->id) + ")");
-		};
-
-		// Init Discord Game SDK
-		discord.Init();
-
-		// Update Discord Presence
-		discord.rpc.type = DiscordActivityType_Playing;
-		discord.rpc.timestamps.start = time(0);
-		strcpy(discord.rpc.assets.large_image, "square_icon");
-		strcpy(discord.rpc.assets.large_text, version);
-		RandomStr(discord.rpc.secrets.match, 32);
-		RandomStr(discord.rpc.secrets.join, 32);
-		RandomStr(discord.rpc.secrets.spectate, 32);
-		discord.UpdateRPC();
-
-		if(!demo && !skipconnect) {
-			// Run startup thread
-			pthread_create(&thread, NULL, StartupThread, NULL);
-		}
+		#endif
 
 		while(true) {
 			if(fps > 0) {
@@ -405,10 +413,12 @@ void FrameBegin() {
 	switch(frame) {
 		case 1: // Game
 			#ifndef __EMSCRIPTEN__
-				// Update Discord Presence
-				strcpy(discord.rpc.state, "In Game");
-				strcpy(discord.rpc.details, (spectating ? "Spectating someone" : (demo ? "Watching demo" : "Stage 1")));
-				discord.UpdateRPC();
+				#ifndef NDISCORD
+					// Update Discord Presence
+					strcpy(discord.rpc.state, "In Game");
+					strcpy(discord.rpc.details, (spectating ? "Spectating someone" : (demo ? "Watching demo" : "Stage 1")));
+					discord.UpdateRPC();
+				#endif
 
 				// Play background music
 				if(!Mix_Playing(0)) {
@@ -425,18 +435,22 @@ void FrameBegin() {
 			break;
 		case 2: // Main menu
 			#ifndef __EMSCRIPTEN__
-				// Update Discord Presence
-				strcpy(discord.rpc.state, "In Main Menu");
-				strcpy(discord.rpc.details, "Wasting some time");
-				discord.UpdateRPC();
+				#ifndef NDISCORD
+					// Update Discord Presence
+					strcpy(discord.rpc.state, "In Main Menu");
+					strcpy(discord.rpc.details, "Wasting some time");
+					discord.UpdateRPC();
+				#endif
 			#endif
 			break;
 		case 3: // Options
 			#ifndef __EMSCRIPTEN__
-				// Update Discord Presence
-				strcpy(discord.rpc.state, "In Main Menu");
-				strcpy(discord.rpc.details, "Changing some options");
-				discord.UpdateRPC();
+				#ifndef NDISCORD
+					// Update Discord Presence
+					strcpy(discord.rpc.state, "In Main Menu");
+					strcpy(discord.rpc.details, "Changing some options");
+					discord.UpdateRPC();
+				#endif
 			#endif
 
 			// Create trackbar
@@ -450,13 +464,18 @@ void FrameBegin() {
 			engine.DrawLine(2, 16, 5, 1);
 			engine.SetColor(white);
 			engine.SetTarget(NULL);
+
+			// Reset mouse lock
+			mouseLock = false;
 			break;
 		case 4: // Dialog box
 			#ifndef __EMSCRIPTEN__
-				// Update Discord Presence
-				strcpy(discord.rpc.state, "In Main Menu");
-				strcpy(discord.rpc.details, "Wasting some time");
-				discord.UpdateRPC();
+				#ifndef NDISCORD
+					// Update Discord Presence
+					strcpy(discord.rpc.state, "In Main Menu");
+					strcpy(discord.rpc.details, "Wasting some time");
+					discord.UpdateRPC();
+				#endif
 			#endif
 			break;
 	}
@@ -516,8 +535,10 @@ void Frame() {
 	}
 
 	#ifndef __EMSCRIPTEN__
-		// Run Discord Presence tasks
-		discord.RunTasks();
+		#ifndef NDISCORD
+			// Run Discord Presence tasks
+			discord.RunTasks();
+		#endif
 	#endif
 
 	// Keyboard handling
@@ -564,9 +585,7 @@ void Frame() {
 
 	switch(frame) {
 		case 1: // Game
-			#ifndef __EMSCRIPTEN__
 			if(!spectating) {
-			#endif
 				// If game frame is not changing
 				if(gameFrameChange == 0) {
 					// If not in demo mode
@@ -589,6 +608,11 @@ void Frame() {
 						}
 						if(!key[SDL_SCANCODE_UP] && jumpKey) {
 							jumpKey = false;
+						}
+
+						// Must be used to prevent bugs, this will be shooting in the futsure
+						if((mouse & SDL_BUTTON(SDL_BUTTON_LEFT)) && !mouseLock) {
+							mouseLock = true;
 						}
 
 						// Gravity
@@ -678,49 +702,53 @@ void Frame() {
 					} else if(posX < rect.x + rect.w && key[SDL_SCANCODE_LEFT]) {
 						posX = rect.x + rect.w;
 					}
-				}*/
-
-				// If not in demo mode
-				if(!demo) {
-					#ifndef __EMSCRIPTEN__
-						// Send player position to the server
-						if(connected && (posX != tmpX || posY != tmpY)) {
-							tmpX = posX;
-							tmpY = posY;
-							if(conn->write("send " + Serialize(gameFrame, posX, posY) + "|") < 0) {
-								frame = 4;
-								dialogBox.Set("Error while communicating with the server (" + NumToStr(easysock::lastError, 0) + " at " + NumToStr(easysock::lastErrorPlace, 0) + ")");
-								pthread_create(&thread, NULL, StartupThread, NULL);
-								return;
-							}
-						}
-					#endif
 				}
+				*/
 
 				// On game frame change
 				if(gameFrameChange == 0 && gameFrame != lastGameFrame) {
 					lastGameFrame = gameFrame;
 
 					#ifndef __EMSCRIPTEN__
-						// Update Discord Presence
-						strcpy(discord.rpc.details, ("Stage " + NumToStr(gameFrame, 0)).c_str());
-						discord.UpdateRPC();
+						#ifndef NDISCORD
+							// Update Discord Presence
+							strcpy(discord.rpc.details, ("Stage " + NumToStr(gameFrame, 0)).c_str());
+							discord.UpdateRPC();
+						#endif
 					#endif
 				}
-			#ifndef __EMSCRIPTEN__
+
+				// Send player position to the server
+				if(!demo && connected && (posX != tmpX || posY != tmpY)) {
+					tmpX = posX;
+					tmpY = posY;
+					#ifndef NDISCORD
+						#ifndef __EMSCRIPTEN__
+							if(conn->write("send " + Serialize(lastGameFrame, posX, posY) + "|") < 0) {
+								frame = 4;
+								dialogBox.Set("Error while communicating with the server (" + NumToStr(easysock::lastError, 0) + " at " + NumToStr(easysock::lastErrorPlace, 0) + ")");
+								pthread_create(&thread, NULL, StartupThread, NULL);
+								return;
+							}
+						#endif
+					#endif
+				}
 			} else if(connected) {
 				// Get player position from the server
-				std::string status = conn->read();
-				if(easysock::lastError) {
-					dialogBox.Set("Error while communicating with the server (" + NumToStr(easysock::lastError, 0) + " at " + NumToStr(easysock::lastErrorPlace, 0) + ")");
-					spectating = false;
-					pthread_create(&thread, NULL, StartupThread, NULL);
-					return;
-				} else {
-					Unserialize(status, gameFrame, posX, posY);
-				}
+				#ifndef NDISCORD
+					#ifndef __EMSCRIPTEN__
+						std::string status = conn->read();
+						if(easysock::lastError) {
+							dialogBox.Set("Error while communicating with the server (" + NumToStr(easysock::lastError, 0) + " at " + NumToStr(easysock::lastErrorPlace, 0) + ")");
+							spectating = false;
+							pthread_create(&thread, NULL, StartupThread, NULL);
+							return;
+						} else {
+							Unserialize(status, gameFrame, posX, posY);
+						}
+					#endif
+				#endif
 			}
-			#endif
 
 			// Reload counter
 			if(showCounter) {
@@ -873,6 +901,7 @@ void Frame() {
 					engine.SetTarget(render1);
 					engine.Clear();
 				}
+
 				do {
 					// Render background (flip horizontally if gameFrame is even)
 					engine.Draw(bg, NULL, NULL, 0, NULL, gameFrame % 2 ? SDL_FLIP_NONE : SDL_FLIP_HORIZONTAL);
@@ -921,6 +950,7 @@ void Frame() {
 						break;
 					}
 				} while(1);
+
 				// Executed when game frames has been rendered
 				if(gameFrameChange != 0) {
 					engine.SetTarget(NULL);
@@ -1065,42 +1095,44 @@ void Frame() {
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 #ifndef __EMSCRIPTEN__
-	void* StartupThread(void*) {
-		// TODO: Skip button
-		dialogBox.Set("Connecting to the server...", "");
+	#ifndef NDISCORD
+		void* StartupThread(void*) {
+			// TODO: Skip button
+			dialogBox.Set("Connecting to the server...", "");
 
-		if(connected) {
-			delete conn;
-			connected = false;
-		}
-
-		conn = easysock::tcp::connect("themaking.tk", 34602);
-		if(conn == nullptr) {
-			dialogBox.Set("Cannot connect to the server (" + NumToStr(easysock::lastError, 0) + " at " + NumToStr(easysock::lastErrorPlace, 0) + ")");
-		} else {
-			if(conn->write("connect " + std::string(discord.rpc.secrets.spectate) + "|") < 0) {
-				dialogBox.Set("Error while communicating with the server (" + NumToStr(easysock::lastError, 0) + " at " + NumToStr(easysock::lastErrorPlace, 0) + ")");
+			if(connected) {
 				delete conn;
+				connected = false;
+			}
+
+			conn = easysock::tcp::connect("themaking.tk", 34602);
+			if(conn == nullptr) {
+				dialogBox.Set("Cannot connect to the server (" + NumToStr(easysock::lastError, 0) + " at " + NumToStr(easysock::lastErrorPlace, 0) + ")");
 			} else {
-				std::string status = conn->read();
-				if(easysock::lastError) {
+				if(conn->write("connect " + std::string(discord.rpc.secrets.spectate) + "|") < 0) {
 					dialogBox.Set("Error while communicating with the server (" + NumToStr(easysock::lastError, 0) + " at " + NumToStr(easysock::lastErrorPlace, 0) + ")");
 					delete conn;
-				} else if(status != "success") {
-					if(status == "invalid_token") {
-						dialogBox.Set("Invalid token (try restarting your game");
-					} else {
-						dialogBox.Set("Internal server error");
-					}
-					delete conn;
 				} else {
-					connected = true;
-					frame = 2;
+					std::string status = conn->read();
+					if(easysock::lastError) {
+						dialogBox.Set("Error while communicating with the server (" + NumToStr(easysock::lastError, 0) + " at " + NumToStr(easysock::lastErrorPlace, 0) + ")");
+						delete conn;
+					} else if(status != "success") {
+						if(status == "invalid_token") {
+							dialogBox.Set("Invalid token (try restarting your game");
+						} else {
+							dialogBox.Set("Internal server error");
+						}
+						delete conn;
+					} else {
+						connected = true;
+						frame = 2;
+					}
 				}
 			}
-		}
 
-		pthread_exit(NULL);
-		return NULL;
-	}
+			pthread_exit(NULL);
+			return NULL;
+		}
+	#endif
 #endif

@@ -23,7 +23,7 @@
 		icon: "console.png",
 		index: 2,
 		w: 8 * 100, h: 16 * 28,
-		x: (window.innerWidth - 800) - 20, y: (window.innerHeight - 479) - 20,
+		x: (window.innerWidth - 8 * 100) - 20, y: (window.innerHeight - 16 * 28) - 20,
 		content: '<textarea id="output" readonly></textarea>',
 		close: true,
 		maximize: true,
@@ -40,15 +40,43 @@
 			window.close();
 		},
 		maximize: function() {
+			/* TODO: Fix fullscreen
+			if(winjs && canvasElem) {
+				document.body.insertBefore(canvasElem, winjs.desk);
+				winjs.desk.style.visibility = "hidden";
+				canvasElem.style.position = "absolute";
+				canvasElem.style.top = "50%";
+				canvasElem.style.left = "50%";
+				canvasElem.style.transform = "translate(-50%, -50%)";
+			}
 			if(Module.requestFullscreen) Module.requestFullscreen(true, false);
 			return false;
+			*/
 		},
 		minimize: true,
 	});
 
+	// Get elements
+	var outputElem = document.querySelector("#output");
+	var canvasElem = document.querySelector("#canvas");
+	var statusElem = document.querySelector("#status");
+	var statusBgElem = document.querySelector("#status-bg");
+	var statusTextElem = document.querySelector("#status-text");
+	var progressElem = document.querySelector("#progress");
+	var spinnerElem = document.querySelector("#spinner");
+
+	// Apply stylesheet for maximizing game window
+	gameWin.body.style.background = "#000000";
+	gameWin.body.style.position = "relative";
+	canvasElem.style.position = "absolute";
+	canvasElem.style.top = "50%";
+	canvasElem.style.left = "50%";
+	canvasElem.style.transform = "translate(-50%, -50%)";
+
 	// Load audio
 	var bgsound = new Audio("bgsound.mp3");
 	bgsound.preload = "auto";
+	if(localStorage.volume) bgsound.volume = +localStorage.volume / 100;
 
 	// Callbacks executed by the C++ code
 	function sdlgame_on_exit() {
@@ -67,18 +95,27 @@
 		bgsound.volume = volume;
 	}
 
-	var canvasElem = document.querySelector("#canvas");
-	var outputElem = document.querySelector("#output");
-	var statusElem = document.querySelector("#status");
-	var statusBgElem = document.querySelector("#status-bg");
-	var statusTextElem = document.querySelector("#status-text");
-	var progressElem = document.querySelector("#progress");
-	var spinnerElem = document.querySelector("#spinner");
+	/*
+	// Add fullscreen chanmge listener
+	function fullscreen_change() {
+		var elem = document.fullscreenElement || document.mozFullScreenElement || document.webkitFullscreenElement;
+		if(elem == null) {
+			if(winjs && canvasElem && statusBgElem) {
+				gameWin.body.insertBefore(canvasElem, statusBgElem);
+				winjs.desk.style.visibility = "";
+			}
+		}
+	}
+	document.addEventListener("fullscreenchange", fullscreen_change, false);
+	document.addEventListener("msfullscreenchange", fullscreen_change, false);
+	document.addEventListener("mozfullscreenchange", fullscreen_change, false);
+	document.addEventListener("webkitfullscreenchange", fullscreen_change, false);
+	*/
 
+	// Event listeners for fixing window focus
 	outputElem.addEventListener("click", function() {
 		conWin.main.focus();
 	}, false);
-
 	canvasElem.addEventListener("click", function() {
 		gameWin.main.focus();
 	}, false);
